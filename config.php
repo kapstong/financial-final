@@ -110,11 +110,6 @@ function resolveRecaptchaKey($name) {
         return $configured;
     }
 
-    $appEnv = getenv('APP_ENV') ?: 'development';
-    if ($appEnv === 'production') {
-        return '';
-    }
-
     $testKeys = [
         'RECAPTCHA_SITE_KEY' => '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI',
         'RECAPTCHA_SECRET_KEY' => '6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe',
