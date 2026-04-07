@@ -104,6 +104,25 @@ function resolveAppKey() {
     return $generated;
 }
 
+function resolveRecaptchaKey($name) {
+    $configured = trim((string) getenv($name));
+    if ($configured !== '') {
+        return $configured;
+    }
+
+    $appEnv = getenv('APP_ENV') ?: 'development';
+    if ($appEnv === 'production') {
+        return '';
+    }
+
+    $testKeys = [
+        'RECAPTCHA_SITE_KEY' => '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI',
+        'RECAPTCHA_SECRET_KEY' => '6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe',
+    ];
+
+    return $testKeys[$name] ?? '';
+}
+
 if ((getenv('APP_ENV') ?: '') === 'production') {
     loadEnv(__DIR__ . '/.env.production');
 }
@@ -273,17 +292,8 @@ if (getenv('CUSTOMER_SERVICE_URL')) {
     }
 
 // reCAPTCHA configuration
-if (getenv('RECAPTCHA_SITE_KEY')) {
-    define('RECAPTCHA_SITE_KEY', getenv('RECAPTCHA_SITE_KEY'));
-} else {
-    define('RECAPTCHA_SITE_KEY', '');
-}
-
-if (getenv('RECAPTCHA_SECRET_KEY')) {
-    define('RECAPTCHA_SECRET_KEY', getenv('RECAPTCHA_SECRET_KEY'));
-} else {
-    define('RECAPTCHA_SECRET_KEY', '');
-}
+define('RECAPTCHA_SITE_KEY', resolveRecaptchaKey('RECAPTCHA_SITE_KEY'));
+define('RECAPTCHA_SECRET_KEY', resolveRecaptchaKey('RECAPTCHA_SECRET_KEY'));
 
 // Set PHP configuration based on environment
 if (Config::isDevelopment()) {

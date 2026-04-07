@@ -318,6 +318,18 @@ body.atiera-loading-active .sidebar-toggle {
         loader.setAttribute("aria-hidden", "true");
     }
 
+    function isLogoutUrl(urlLike) {
+        let candidateUrl;
+        try {
+            candidateUrl = urlLike instanceof URL ? urlLike : new URL(urlLike, window.location.href);
+        } catch (error) {
+            return false;
+        }
+
+        const normalizedPath = candidateUrl.pathname.replace(/\/+$/, "").toLowerCase();
+        return /(?:^|\/)logout\.php$/.test(normalizedPath);
+    }
+
     function isNavigableLink(link, event) {
         if (!link || !link.href) {
             return false;
@@ -354,6 +366,9 @@ body.atiera-loading-active .sidebar-toggle {
             return false;
         }
         if (nextUrl.protocol !== "http:" && nextUrl.protocol !== "https:") {
+            return false;
+        }
+        if (isLogoutUrl(nextUrl)) {
             return false;
         }
 
@@ -394,6 +409,10 @@ body.atiera-loading-active .sidebar-toggle {
             }
             const target = (form.getAttribute("target") || "").toLowerCase();
             if (target && target !== "_self") {
+                return;
+            }
+            const action = (form.getAttribute("action") || window.location.href).trim();
+            if (isLogoutUrl(action)) {
                 return;
             }
             const status = (form.dataset.loadingText || "").trim();
