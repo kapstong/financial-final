@@ -1,5 +1,17 @@
 (function(){
     // Shared forecasting logic (TF.js client-side)
+    function buildNaiveForecast(dates, values, periods, details) {
+        const lastDate = new Date(dates[dates.length - 1]);
+        const out = [];
+        let ld = new Date(lastDate.getFullYear(), lastDate.getMonth(), 1);
+        const lastVal = values[values.length - 1] || 0;
+        for (let i = 1; i <= periods; i++) {
+            const m = new Date(ld.getFullYear(), ld.getMonth() + i, 1);
+            out.push({ date: `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2,'0')}-01`, value: lastVal });
+        }
+        return { method: 'naive', forecast: out, details };
+    }
+
     function loadTfJs() {
         if (window.tf) return Promise.resolve();
         return new Promise((resolve, reject) => {
@@ -29,78 +41,67 @@
 
         const windowSize = 6;
         if (values.length <= windowSize) {
-            const lastDate = new Date(dates[dates.length - 1]);
-            const out = [];
-            let ld = new Date(lastDate.getFullYear(), lastDate.getMonth(), 1);
-            const lastVal = values[values.length - 1] || 0;
-            for (let i = 1; i <= periods; i++) {
-                const m = new Date(ld.getFullYear(), ld.getMonth() + i, 1);
-                out.push({ date: `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2,'0')}-01`, value: lastVal });
+            return buildNaiveForecast(dates, values, periods, 'Insufficient history, repeating last value');
+        }
+
+        try {
+            await loadTfJs();
+
+            const xs = [];
+            const ys = [];
+            for (let i = 0; i + windowSize < values.length; i++) {
+                xs.push(values.slice(i, i + windowSize));
+                ys.push(values[i + windowSize]);
             }
-            return { method: 'naive', forecast: out, details: 'Insufficient history, repeating last value' };
-        }
 
-        await loadTfJs();
-
-        const xs = [];
-        const ys = [];
-        for (let i = 0; i + windowSize < values.length; i++) {
-            xs.push(values.slice(i, i + windowSize));
-            ys.push(values[i + windowSize]);
-        }
-
-        if (xs.length === 0 || ys.length === 0) {
-            const lastDate = new Date(dates[dates.length - 1]);
-            const out = [];
-            let ld = new Date(lastDate.getFullYear(), lastDate.getMonth(), 1);
-            const lastVal = values[values.length - 1] || 0;
-            for (let i = 1; i <= periods; i++) {
-                const m = new Date(ld.getFullYear(), ld.getMonth() + i, 1);
-                out.push({ date: `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2,'0')}-01`, value: lastVal });
+            if (xs.length === 0 || ys.length === 0) {
+                return buildNaiveForecast(dates, values, periods, 'Unable to build TF training windows, repeating last value');
             }
-            return { method: 'naive', forecast: out, details: 'Unable to build TF training windows, repeating last value' };
+
+            const mean = values.reduce((s, v) => s + v, 0) / values.length;
+            const variance = values.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / values.length;
+            const std = Math.sqrt(variance) || 1;
+
+            const normXs = xs.map(r => r.map(v => (v - mean) / std));
+            const normYs = ys.map(v => (v - mean) / std);
+
+            const tfXs = tf.tensor2d(normXs, [normXs.length, windowSize]);
+            const tfYs = tf.tensor2d(normYs, [normYs.length, 1]);
+
+            const model = tf.sequential();
+            model.add(tf.layers.dense({ units: 64, activation: 'relu', inputShape: [windowSize] }));
+            model.add(tf.layers.dense({ units: 32, activation: 'relu' }));
+            model.add(tf.layers.dense({ units: 1 }));
+            model.compile({ optimizer: 'adam', loss: 'meanAbsoluteError' });
+
+            const historyFit = await model.fit(tfXs, tfYs, { epochs: 80, batchSize: 8, verbose: 0 });
+
+            let lastWindow = values.slice(-windowSize).map(v => (v - mean) / std);
+            const forecast = [];
+            let lastDate = new Date(dates[dates.length - 1]);
+            lastDate = new Date(lastDate.getFullYear(), lastDate.getMonth(), 1);
+
+            for (let p = 1; p <= periods; p++) {
+                const tensor = tf.tensor2d([lastWindow], [1, windowSize]);
+                const predNorm = (await model.predict(tensor).data())[0];
+                const pred = predNorm * std + mean;
+                const m = new Date(lastDate.getFullYear(), lastDate.getMonth() + p, 1);
+                forecast.push({ date: `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2,'0')}-01`, value: pred });
+                lastWindow = lastWindow.slice(1).concat([(pred - mean) / std]);
+            }
+
+            const trainingLoss = historyFit.history && historyFit.history.loss ? historyFit.history.loss[historyFit.history.loss.length - 1] : null;
+
+            return {
+                method: 'tfjs_dense',
+                forecast,
+                details: { mean, std },
+                training: { loss: trainingLoss, epochs: historyFit.epoch ? historyFit.epoch.length : historyFit.history.loss.length }
+            };
+        } catch (err) {
+            console.warn('TF forecast fallback to naive model', err);
+            return buildNaiveForecast(dates, values, periods, 'TF model unavailable, repeating last value');
         }
-
-        const mean = values.reduce((s, v) => s + v, 0) / values.length;
-        const variance = values.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / values.length;
-        const std = Math.sqrt(variance) || 1;
-
-        const normXs = xs.map(r => r.map(v => (v - mean) / std));
-        const normYs = ys.map(v => (v - mean) / std);
-
-        const tfXs = tf.tensor2d(normXs, [normXs.length, windowSize]);
-        const tfYs = tf.tensor2d(normYs, [normYs.length, 1]);
-
-        const model = tf.sequential();
-        model.add(tf.layers.dense({ units: 64, activation: 'relu', inputShape: [windowSize] }));
-        model.add(tf.layers.dense({ units: 32, activation: 'relu' }));
-        model.add(tf.layers.dense({ units: 1 }));
-        model.compile({ optimizer: 'adam', loss: 'meanAbsoluteError' });
-
-        const historyFit = await model.fit(tfXs, tfYs, { epochs: 80, batchSize: 8, verbose: 0 });
-
-        let lastWindow = values.slice(-windowSize).map(v => (v - mean) / std);
-        const forecast = [];
-        let lastDate = new Date(dates[dates.length - 1]);
-        lastDate = new Date(lastDate.getFullYear(), lastDate.getMonth(), 1);
-
-        for (let p = 1; p <= periods; p++) {
-            const tensor = tf.tensor2d([lastWindow]);
-            const predNorm = (await model.predict(tensor).data())[0];
-            const pred = predNorm * std + mean;
-            const m = new Date(lastDate.getFullYear(), lastDate.getMonth() + p, 1);
-            forecast.push({ date: `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2,'0')}-01`, value: pred });
-            lastWindow = lastWindow.slice(1).concat([(pred - mean) / std]);
-        }
-
-        const trainingLoss = historyFit.history && historyFit.history.loss ? historyFit.history.loss[historyFit.history.loss.length - 1] : null;
-
-        return {
-            method: 'tfjs_dense',
-            forecast,
-            details: { mean, std },
-            training: { loss: trainingLoss, epochs: historyFit.epoch ? historyFit.epoch.length : historyFit.history.loss.length }
-        };
     }
 
     async function fetchAndRenderForecast(apiPath, predictMonths = 12) {

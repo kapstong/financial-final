@@ -86,8 +86,19 @@ class Mailer {
                 if (!$sent) {
                     $detail = $this->lastError ? " | {$this->lastError}" : '';
                     error_log("Mailer Error: SMTP send failed{$detail}");
-                    // Do not silently fallback when SMTP is configured; this avoids false-success sends.
-                    return false;
+
+                    $sent = @mail($to, $subject, $message, $headers);
+                    if ($sent) {
+                        error_log("Mailer Notice: SMTP send failed; PHP mail() fallback succeeded for $to");
+                        $this->lastError = '';
+                    } else {
+                        $fallbackError = error_get_last();
+                        if ($fallbackError) {
+                            $this->lastError .= " | PHP fallback: " . $fallbackError['message'];
+                            error_log("Mailer Error: PHP mail() fallback failed: " . $fallbackError['message']);
+                        }
+                        return false;
+                    }
                 }
             } else {
                 $sent = @mail($to, $subject, $message, $headers);
