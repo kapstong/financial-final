@@ -106,16 +106,7 @@ function resolveAppKey() {
 
 function resolveRecaptchaKey($name) {
     $configured = trim((string) getenv($name));
-    if ($configured !== '') {
-        return $configured;
-    }
-
-    $testKeys = [
-        'RECAPTCHA_SITE_KEY' => '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI',
-        'RECAPTCHA_SECRET_KEY' => '6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe',
-    ];
-
-    return $testKeys[$name] ?? '';
+    return $configured !== '' ? $configured : '';
 }
 
 if ((getenv('APP_ENV') ?: '') === 'production') {
