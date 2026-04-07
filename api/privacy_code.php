@@ -16,6 +16,15 @@ error_reporting(E_ALL);
 
 // Set up error handler to catch and output errors as JSON
 set_error_handler(function($errno, $errstr, $errfile, $errline) {
+    if (!(error_reporting() & $errno)) {
+        return false;
+    }
+
+    if (in_array($errno, [E_DEPRECATED, E_USER_DEPRECATED], true)) {
+        error_log(sprintf('privacy_code.php deprecation: %s in %s on line %d', $errstr, $errfile, $errline));
+        return true;
+    }
+
     http_response_code(500);
     echo json_encode(['error' => 'Server error: ' . $errstr]);
     ob_end_flush();

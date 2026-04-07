@@ -659,7 +659,7 @@ class Auth {
     }
 }
 
-function ensure_api_auth($method, array $permissionMap, Auth $auth = null) {
+function ensure_api_auth($method, array $permissionMap, ?Auth $auth = null) {
     if (!isset($_SESSION['user'])) {
         http_response_code(401);
         header('Content-Type: application/json');

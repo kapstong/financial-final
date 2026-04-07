@@ -16,10 +16,19 @@
             return { method: 'naive', forecast: [], details: 'No history provided' };
         }
 
-        const dates = history.map(h => h.date);
-        const values = history.map(h => Number(h.value || 0));
+        const sanitizedHistory = history.filter(h => {
+            const value = Number(h && h.value);
+            return h && h.date && Number.isFinite(value);
+        });
+        const dates = sanitizedHistory.map(h => h.date);
+        const values = sanitizedHistory.map(h => Number(h.value));
 
-        if (values.length < 6) {
+        if (values.length === 0) {
+            return { method: 'naive', forecast: [], details: 'No valid history provided' };
+        }
+
+        const windowSize = 6;
+        if (values.length <= windowSize) {
             const lastDate = new Date(dates[dates.length - 1]);
             const out = [];
             let ld = new Date(lastDate.getFullYear(), lastDate.getMonth(), 1);
@@ -33,12 +42,23 @@
 
         await loadTfJs();
 
-        const windowSize = 6;
         const xs = [];
         const ys = [];
         for (let i = 0; i + windowSize < values.length; i++) {
             xs.push(values.slice(i, i + windowSize));
             ys.push(values[i + windowSize]);
+        }
+
+        if (xs.length === 0 || ys.length === 0) {
+            const lastDate = new Date(dates[dates.length - 1]);
+            const out = [];
+            let ld = new Date(lastDate.getFullYear(), lastDate.getMonth(), 1);
+            const lastVal = values[values.length - 1] || 0;
+            for (let i = 1; i <= periods; i++) {
+                const m = new Date(ld.getFullYear(), ld.getMonth() + i, 1);
+                out.push({ date: `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2,'0')}-01`, value: lastVal });
+            }
+            return { method: 'naive', forecast: out, details: 'Unable to build TF training windows, repeating last value' };
         }
 
         const mean = values.reduce((s, v) => s + v, 0) / values.length;
@@ -48,7 +68,7 @@
         const normXs = xs.map(r => r.map(v => (v - mean) / std));
         const normYs = ys.map(v => (v - mean) / std);
 
-        const tfXs = tf.tensor2d(normXs);
+        const tfXs = tf.tensor2d(normXs, [normXs.length, windowSize]);
         const tfYs = tf.tensor2d(normYs, [normYs.length, 1]);
 
         const model = tf.sequential();
