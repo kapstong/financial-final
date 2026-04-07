@@ -9,37 +9,106 @@ if (isset($_SERVER['HTTP_HOST']) && $_SERVER['HTTP_HOST'] === 'financial.atierah
     require_once __DIR__ . '/config_production.php';
 }
 
-// Load environment variables from .env file
-function loadEnv($path) {
+function setEnvValue($name, $value, $override = false) {
+    $hasValue = array_key_exists($name, $_SERVER) || array_key_exists($name, $_ENV) || getenv($name) !== false;
+    if ($override || !$hasValue) {
+        putenv(sprintf('%s=%s', $name, $value));
+        $_ENV[$name] = $value;
+        $_SERVER[$name] = $value;
+    }
+}
+
+function loadEnv($path, $override = false) {
     if (!file_exists($path)) {
-        throw new Exception('.env file not found. Please create one based on .env.example');
+        return false;
     }
 
     $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
     foreach ($lines as $line) {
-        if (strpos(trim($line), '#') === 0) {
-            continue; // Skip comments
+        $line = trim($line);
+        if ($line === '' || strpos($line, '#') === 0 || strpos($line, '=') === false) {
+            continue;
         }
 
         list($name, $value) = explode('=', $line, 2);
         $name = trim($name);
         $value = trim($value);
 
-        if (!array_key_exists($name, $_SERVER) && !array_key_exists($name, $_ENV)) {
-            putenv(sprintf('%s=%s', $name, $value));
-            $_ENV[$name] = $value;
-            $_SERVER[$name] = $value;
+        if ($value !== '' && (($value[0] === '"' && substr($value, -1) === '"') || ($value[0] === "'" && substr($value, -1) === "'"))) {
+            $value = substr($value, 1, -1);
         }
+
+        setEnvValue($name, $value, $override);
     }
+
+    return true;
 }
 
-// Load .env file
-try {
-    loadEnv(__DIR__ . '/.env');
-} catch (Exception $e) {
-    error_log('Configuration error: ' . $e->getMessage());
-    // Continue with default values if .env is missing
+function isPlaceholderValue($value) {
+    if (!is_string($value)) {
+        return false;
+    }
+
+    $trimmed = trim($value);
+    if ($trimmed === '') {
+        return true;
+    }
+
+    $markers = [
+        'change-in-production',
+        'your-random-key',
+        'your-api-key-here',
+        'your-database',
+        'your-username',
+        'your-password'
+    ];
+
+    $lower = strtolower($trimmed);
+    foreach ($markers as $marker) {
+        if (strpos($lower, $marker) !== false) {
+            return true;
+        }
+    }
+
+    return false;
 }
+
+function resolveAppKey() {
+    $envKey = getenv('APP_KEY');
+    if (is_string($envKey) && !isPlaceholderValue($envKey)) {
+        return trim($envKey);
+    }
+
+    $keyPath = __DIR__ . '/config/app.key';
+    if (is_file($keyPath)) {
+        $stored = trim((string) file_get_contents($keyPath));
+        if (!isPlaceholderValue($stored)) {
+            setEnvValue('APP_KEY', $stored, true);
+            return $stored;
+        }
+    }
+
+    $generated = 'base64:' . base64_encode(random_bytes(32));
+    $dir = dirname($keyPath);
+    if (!is_dir($dir)) {
+        mkdir($dir, 0755, true);
+    }
+    $writeResult = @file_put_contents($keyPath, $generated . PHP_EOL, LOCK_EX);
+    if ($writeResult !== false && function_exists('chmod')) {
+        @chmod($keyPath, 0600);
+    } elseif ($writeResult === false) {
+        error_log('Unable to persist generated APP_KEY to ' . $keyPath . '. Set APP_KEY in the environment for stable encryption.');
+    }
+
+    setEnvValue('APP_KEY', $generated, true);
+    return $generated;
+}
+
+if ((getenv('APP_ENV') ?: '') === 'production') {
+    loadEnv(__DIR__ . '/.env.production');
+}
+loadEnv(__DIR__ . '/.env');
+resolveAppKey();
 
 // Set session configuration BEFORE any session is started
 if (session_status() === PHP_SESSION_NONE) {
@@ -102,15 +171,15 @@ class Config {
                 'env' => getenv('APP_ENV') ?: 'development',
                 'name' => getenv('APP_NAME') ?: 'ATIERA Finance',
                 'url' => getenv('APP_URL') ?: 'http://localhost',
-                'key' => getenv('APP_KEY') ?: 'default-key-change-in-production',
+                'key' => resolveAppKey(),
                 'debug' => getenv('APP_ENV') === 'development',
             ],
 
             'database' => [
                 'host' => getenv('DB_HOST') ?: 'localhost',
                 'name' => getenv('DB_NAME') ?: 'fina_financialmngmnt',
-                'user' => getenv('DB_USER') ?: 'fina_financialg10',
-                'pass' => getenv('DB_PASS') ?: 'jekjek123',
+                'user' => getenv('DB_USER') ?: 'root',
+                'pass' => getenv('DB_PASS') ?: '',
                 'charset' => 'utf8mb4',
             ],
 
@@ -136,11 +205,15 @@ class Config {
                 'csrf_lifetime' => getenv('CSRF_TOKEN_LIFETIME') ?: 3600, // 1 hour
                 'login_attempts_max' => getenv('LOGIN_ATTEMPTS_MAX') ?: 5,
                 'lockout_duration' => getenv('LOCKOUT_DURATION') ?: 300, // 5 minutes
+                'twofa_attempts_max' => getenv('TWOFA_ATTEMPTS_MAX') ?: 5,
+                'twofa_lockout_hours' => getenv('TWOFA_LOCKOUT_HOURS') ?: 1,
+                'allow_sso_get_tokens' => filter_var(getenv('ALLOW_SSO_GET_TOKENS') ?: '0', FILTER_VALIDATE_BOOLEAN),
             ],
 
             'api' => [
                 'rate_limit' => getenv('API_RATE_LIMIT') ?: 100,
                 'key' => getenv('API_KEY') ?: '',
+                'allow_query_key' => filter_var(getenv('API_ALLOW_QUERY_KEY') ?: '0', FILTER_VALIDATE_BOOLEAN),
             ],
 
             'logging' => [
@@ -203,13 +276,13 @@ if (getenv('CUSTOMER_SERVICE_URL')) {
 if (getenv('RECAPTCHA_SITE_KEY')) {
     define('RECAPTCHA_SITE_KEY', getenv('RECAPTCHA_SITE_KEY'));
 } else {
-    define('RECAPTCHA_SITE_KEY', '6LcCem4sAAAAAFLCUCDuYjF1KeD1brWJiWo3sGnI');
+    define('RECAPTCHA_SITE_KEY', '');
 }
 
 if (getenv('RECAPTCHA_SECRET_KEY')) {
     define('RECAPTCHA_SECRET_KEY', getenv('RECAPTCHA_SECRET_KEY'));
 } else {
-    define('RECAPTCHA_SECRET_KEY', '6LcCem4sAAAAAILTWAMP9nnMMBX44oRgmKt-f3jZ');
+    define('RECAPTCHA_SECRET_KEY', '');
 }
 
 // Set PHP configuration based on environment

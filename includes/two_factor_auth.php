@@ -119,7 +119,7 @@ class TwoFactorAuth {
     public function generateBackupCodes($count = 10) {
         $codes = [];
         for ($i = 0; $i < $count; $i++) {
-            $codes[] = strtoupper(substr(md5(uniqid(mt_rand(), true)), 0, 10));
+            $codes[] = strtoupper(bin2hex(random_bytes(5)));
         }
         return $codes;
     }
@@ -268,10 +268,18 @@ class TwoFactorAuth {
 
             case 'backup_code':
                 $backupCodes = json_decode($config['backup_codes'], true);
-                if (in_array($code, $backupCodes)) {
+                $normalizedCode = strtoupper(trim((string) $code));
+                $matchedIndex = null;
+                foreach ((array) $backupCodes as $index => $backupCode) {
+                    if (is_string($backupCode) && hash_equals($backupCode, $normalizedCode)) {
+                        $matchedIndex = $index;
+                        break;
+                    }
+                }
+
+                if ($matchedIndex !== null) {
                     // Remove used backup code
-                    $key = array_search($code, $backupCodes);
-                    unset($backupCodes[$key]);
+                    unset($backupCodes[$matchedIndex]);
 
                     $stmt = $this->db->prepare("
                         UPDATE user_2fa SET backup_codes = ? WHERE user_id = ?
@@ -474,6 +482,13 @@ class TwoFactorAuth {
      * Check if account should be locked due to failed 2FA attempts
      */
     public function shouldLockAccount($userId, $maxAttempts = 5, $lockoutHours = 1) {
+        if (class_exists('Config')) {
+            $maxAttempts = (int) Config::get('security.twofa_attempts_max', $maxAttempts);
+            $lockoutHours = (int) Config::get('security.twofa_lockout_hours', $lockoutHours);
+        }
+
+        $maxAttempts = max(1, $maxAttempts);
+        $lockoutHours = max(1, $lockoutHours);
         $failedAttempts = $this->getFailedAttempts($userId, $lockoutHours);
         return $failedAttempts >= $maxAttempts;
     }

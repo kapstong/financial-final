@@ -257,8 +257,9 @@ class Auth {
 
     public function login($username, $password) {
         // Check if account is locked
-        if ($this->checkLockout()['locked']) {
-            return ['success' => false, 'lockout' => $this->checkLockout()];
+        $lockout = $this->checkLockout();
+        if ($lockout['locked']) {
+            return ['success' => false, 'lockout' => $lockout];
         }
 
         try {
@@ -280,6 +281,8 @@ class Auth {
                 $fullName = trim($fullName);
 
                 // Successful login
+                session_regenerate_id(true);
+                unset($_SESSION['2fa_verified'], $_SESSION['2fa_verified_at']);
                 $_SESSION['user'] = [
                     'id' => $user['id'],
                     'username' => $user['username'],
@@ -306,11 +309,19 @@ class Auth {
                 );
 
                 $_SESSION['login_attempts'] = 0;
+                unset($_SESSION['lockout_time']);
                 return ['success' => true, 'user' => $_SESSION['user']];
             } else {
                 // Failed login
-                $_SESSION['login_attempts'] = ($_SESSION['login_attempts'] ?? 0) + 1;
-                return ['success' => false, 'attempts' => $_SESSION['login_attempts']];
+                $attempts = (int) ($_SESSION['login_attempts'] ?? 0) + 1;
+                $_SESSION['login_attempts'] = $attempts;
+
+                $maxAttempts = (int) Config::get('security.login_attempts_max', 5);
+                if ($attempts >= $maxAttempts && empty($_SESSION['lockout_time'])) {
+                    $_SESSION['lockout_time'] = time();
+                }
+
+                return ['success' => false, 'attempts' => $attempts, 'lockout' => $this->checkLockout()];
             }
         } catch (Exception $e) {
             error_log("Login error: " . $e->getMessage());
@@ -341,6 +352,8 @@ class Auth {
             $fullName = $computedFullName ?: ($user['full_name'] ?? '');
             $fullName = trim($fullName);
 
+            session_regenerate_id(true);
+            unset($_SESSION['2fa_verified'], $_SESSION['2fa_verified_at']);
             $_SESSION['user'] = [
                 'id' => $user['id'],
                 'username' => $user['username'],
@@ -364,6 +377,8 @@ class Auth {
                 [$user['id']]
             );
 
+            $_SESSION['login_attempts'] = 0;
+            unset($_SESSION['lockout_time']);
             return ['success' => true, 'user' => $_SESSION['user']];
         } catch (Exception $e) {
             error_log("Login by user ID error: " . $e->getMessage());
@@ -385,27 +400,25 @@ class Auth {
     }
 
     public function checkLockout() {
-        $attempts = $_SESSION['login_attempts'] ?? 0;
-        $locked = $attempts >= 5;
-        $remaining = 0;
+        $attempts = (int) ($_SESSION['login_attempts'] ?? 0);
+        $maxAttempts = (int) Config::get('security.login_attempts_max', 5);
+        $lockoutDuration = (int) Config::get('security.lockout_duration', 300);
+        $lockoutTime = isset($_SESSION['lockout_time']) ? (int) $_SESSION['lockout_time'] : 0;
 
-        if ($locked) {
-            $lockoutTime = $_SESSION['lockout_time'] ?? time();
-            $elapsed = time() - $lockoutTime;
-            $remaining = max(0, 300 - $elapsed); // 5 minutes lockout
-
-            if ($remaining <= 0) {
-                // Lockout expired
-                $_SESSION['login_attempts'] = 0;
-                unset($_SESSION['lockout_time']);
-                $locked = false;
-            }
-        } else if ($attempts >= 5) {
-            $_SESSION['lockout_time'] = time();
-            $remaining = 300;
+        if ($attempts < $maxAttempts || $lockoutTime <= 0) {
+            return ['locked' => false, 'remaining' => 0];
         }
 
-        return ['locked' => $locked, 'remaining' => $remaining];
+        $elapsed = time() - $lockoutTime;
+        $remaining = max(0, $lockoutDuration - $elapsed);
+
+        if ($remaining <= 0) {
+            $_SESSION['login_attempts'] = 0;
+            unset($_SESSION['lockout_time']);
+            return ['locked' => false, 'remaining' => 0];
+        }
+
+        return ['locked' => true, 'remaining' => $remaining];
     }
 
     public function getCurrentUser() {

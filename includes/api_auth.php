@@ -64,8 +64,8 @@ class APIAuth {
         // Check X-API-Key header
         $apiKey = $_SERVER['HTTP_X_API_KEY'] ?? '';
 
-        // Check query parameter (less secure, but supported)
-        if (empty($apiKey)) {
+        // Optional compatibility mode for legacy clients.
+        if (empty($apiKey) && Config::get('api.allow_query_key', false)) {
             $apiKey = $_GET['api_key'] ?? '';
         }
 
@@ -133,7 +133,7 @@ class APIAuth {
             ");
 
             $method = $_SERVER['REQUEST_METHOD'];
-            $endpoint = $_SERVER['REQUEST_URI'];
+            $endpoint = $this->sanitizeEndpoint($_SERVER['REQUEST_URI'] ?? '');
             $ipAddress = $_SERVER['REMOTE_ADDR'] ?? '';
             $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? '';
 
@@ -142,6 +142,48 @@ class APIAuth {
             // Don't fail the request if logging fails
             Logger::getInstance()->error("API request logging failed: " . $e->getMessage());
         }
+    }
+
+    private function sanitizeEndpoint($uri) {
+        if ($uri === '') {
+            return '';
+        }
+
+        $sensitiveParams = [
+            'api_key',
+            'token',
+            'signature',
+            'client_secret',
+            'access_token',
+            'refresh_token'
+        ];
+
+        $parts = parse_url($uri);
+        if ($parts === false) {
+            return preg_replace('/([?&])(api_key|token|signature|client_secret|access_token|refresh_token)=[^&]*/i', '$1$2=[REDACTED]', $uri);
+        }
+
+        $path = $parts['path'] ?? '';
+        $query = '';
+        if (!empty($parts['query'])) {
+            parse_str($parts['query'], $params);
+            foreach ($sensitiveParams as $param) {
+                if (array_key_exists($param, $params)) {
+                    $params[$param] = '[REDACTED]';
+                }
+            }
+            $query = http_build_query($params);
+        }
+
+        $sanitized = $path;
+        if ($query !== '') {
+            $sanitized .= '?' . $query;
+        }
+        if (!empty($parts['fragment'])) {
+            $sanitized .= '#' . $parts['fragment'];
+        }
+
+        return $sanitized;
     }
 
     /**

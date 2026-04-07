@@ -20,9 +20,12 @@ $info = '';
 
 // Get 2FA configuration
 $config = $twoFA->get2FAConfig($userId);
+$isTwoFALocked = $twoFA->shouldLockAccount($userId);
 
 if (!$config) {
     $error = '2FA is not properly configured for this account.';
+} elseif ($isTwoFALocked) {
+    $error = 'Too many invalid verification attempts. Please wait before trying again.';
 }
 
 // Handle form submission
@@ -32,7 +35,9 @@ if ($_POST) {
     } else {
         $code = trim($_POST['code'] ?? '');
 
-        if (empty($code)) {
+        if ($twoFA->shouldLockAccount($userId)) {
+            $error = 'Too many invalid verification attempts. Please wait before trying again.';
+        } elseif (empty($code)) {
             $error = 'Please enter your verification code.';
         } else {
             // Verify the code
@@ -40,6 +45,7 @@ if ($_POST) {
 
             if ($result['success']) {
                 // 2FA verification successful
+                session_regenerate_id(true);
                 $twoFA->mark2FAVerified($userId);
 
                 // Restore the user session
@@ -70,7 +76,7 @@ if ($_POST) {
                 $deviceInfo = detect_device_info($_SERVER['HTTP_USER_AGENT'] ?? '');
                 $deviceLabel = build_device_label($devicePayload, $_SERVER['HTTP_USER_AGENT'] ?? '');
                 Logger::getInstance()->logUserAction(
-                    $loginMethod === 'qr' ? 'QR Login' : 'User Login',
+                    $loginMethod === 'qr' ? 'QR Login' : ($loginMethod === 'sso' ? 'SSO Login' : 'User Login'),
                     'login_sessions',
                     null,
                     null,
@@ -110,6 +116,8 @@ if ($_POST) {
 if (isset($_GET['cancel'])) {
     unset($_SESSION['pending_2fa_user_id']);
     unset($_SESSION['pending_2fa_user']);
+    unset($_SESSION['pending_device']);
+    unset($_SESSION['pending_login_method']);
     header('Location: index.php?info=2fa_cancelled');
     exit();
 }
@@ -210,13 +218,14 @@ if (isset($_GET['cancel'])) {
             required
             autofocus
             autocomplete="one-time-code"
+            <?php echo $isTwoFALocked ? 'disabled' : ''; ?>
           >
           <p class="text-xs text-slate-500 mt-2 text-center">
             Enter the 6-digit code from your authenticator app
           </p>
         </div>
 
-        <button type="submit" class="btn">
+        <button type="submit" class="btn" <?php echo $isTwoFALocked ? 'disabled' : ''; ?>>
           <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
           </svg>

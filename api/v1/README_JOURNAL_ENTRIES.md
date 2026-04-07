@@ -23,7 +23,7 @@ X-API-Key: YOUR_API_KEY
 
 ### Option 3: Query Parameter (Less Secure)
 ```
-?api_key=YOUR_API_KEY
+Authorization: Bearer YOUR_API_KEY
 ```
 
 ## Rate Limits

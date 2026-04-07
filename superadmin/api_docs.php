@@ -74,7 +74,8 @@ X-API-Key: your_api_key_here</code></pre>
                         <div class="card bg-light mt-3">
                             <div class="card-body">
                                 <h6>Query Parameter (less secure)</h6>
-                                <pre><code>GET /api/v1/invoices?api_key=your_api_key_here</code></pre>
+                                <pre><code>GET /api/v1/invoices
+Authorization: Bearer your_api_key_here</code></pre>
                             </div>
                         </div>
 

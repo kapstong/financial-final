@@ -4,6 +4,7 @@ require_once 'includes/auth.php';
 require_once 'includes/csrf.php';
 require_once 'includes/device_detector.php';
 $auth = new Auth();
+$recaptchaConfigured = RECAPTCHA_SITE_KEY !== '' && RECAPTCHA_SECRET_KEY !== '';
 
 // Initialize variables
 $info = '';
@@ -64,42 +65,44 @@ if ($_POST) {
     if (empty($username) || empty($password)) {
         $error = 'Please enter username and password.';
     } else {
-        $recaptchaOk = false;
-        $recaptchaGraceUntil = $_SESSION['recaptcha_verified_until'] ?? 0;
-        if (!empty($recaptchaGraceUntil) && time() < $recaptchaGraceUntil) {
-            $recaptchaOk = true;
-        }
-
-        if (!$recaptchaOk) {
-            if (empty($recaptchaResponse)) {
-                $error = 'Captcha verification failed. Please try again.';
-                goto login_end;
+        if ($recaptchaConfigured) {
+            $recaptchaOk = false;
+            $recaptchaGraceUntil = $_SESSION['recaptcha_verified_until'] ?? 0;
+            if (!empty($recaptchaGraceUntil) && time() < $recaptchaGraceUntil) {
+                $recaptchaOk = true;
             }
 
-            // Verify reCAPTCHA
-            $verifyUrl = 'https://www.google.com/recaptcha/api/siteverify';
-            $verifyPayload = http_build_query([
-                'secret' => RECAPTCHA_SECRET_KEY,
-                'response' => $recaptchaResponse,
-                'remoteip' => $_SERVER['REMOTE_ADDR'] ?? ''
-            ]);
-            $verifyContext = stream_context_create([
-                'http' => [
-                    'method' => 'POST',
-                    'header' => "Content-type: application/x-www-form-urlencoded\r\n",
-                    'content' => $verifyPayload,
-                    'timeout' => 5
-                ]
-            ]);
-            $verifyResult = @file_get_contents($verifyUrl, false, $verifyContext);
-            $verifyData = $verifyResult ? json_decode($verifyResult, true) : null;
+            if (!$recaptchaOk) {
+                if (empty($recaptchaResponse)) {
+                    $error = 'Captcha verification failed. Please try again.';
+                    goto login_end;
+                }
 
-            if (!$verifyData || empty($verifyData['success'])) {
-                $error = 'Captcha verification failed. Please try again.';
-                goto login_end;
+                // Verify reCAPTCHA
+                $verifyUrl = 'https://www.google.com/recaptcha/api/siteverify';
+                $verifyPayload = http_build_query([
+                    'secret' => RECAPTCHA_SECRET_KEY,
+                    'response' => $recaptchaResponse,
+                    'remoteip' => $_SERVER['REMOTE_ADDR'] ?? ''
+                ]);
+                $verifyContext = stream_context_create([
+                    'http' => [
+                        'method' => 'POST',
+                        'header' => "Content-type: application/x-www-form-urlencoded\r\n",
+                        'content' => $verifyPayload,
+                        'timeout' => 5
+                    ]
+                ]);
+                $verifyResult = @file_get_contents($verifyUrl, false, $verifyContext);
+                $verifyData = $verifyResult ? json_decode($verifyResult, true) : null;
+
+                if (!$verifyData || empty($verifyData['success'])) {
+                    $error = 'Captcha verification failed. Please try again.';
+                    goto login_end;
+                }
+
+                $_SESSION['recaptcha_verified_until'] = time() + (30 * 60);
             }
-
-            $_SESSION['recaptcha_verified_until'] = time() + (30 * 60);
         }
 
         $result = $auth->login($username, $password);
@@ -162,7 +165,7 @@ if ($_POST) {
              } elseif (isset($result['error'])) {
                 $error = $result['error'];
             } else {
-                $attemptsLeft = 5 - ($result['attempts'] ?? 0);
+                $attemptsLeft = max(0, (int) Config::get('security.login_attempts_max', 5) - (int) ($result['attempts'] ?? 0));
                 $error = 'Invalid username or password. Attempts remaining: ' . $attemptsLeft;
             }
         }
@@ -194,7 +197,9 @@ login_end:
   })();
 </script>
     <script src="https://cdn.tailwindcss.com"></script>
+<?php if ($recaptchaConfigured): ?>
     <script src="https://www.google.com/recaptcha/api.js?render=explicit" async defer></script>
+<?php endif; ?>
 <link rel="stylesheet" href="responsive.css">
 
 <style>
@@ -593,7 +598,11 @@ login_end:
 
         <div class="recaptcha-wrap captcha-panel">
           <div class="flex items-center gap-3 flex-wrap">
+            <?php if ($recaptchaConfigured): ?>
             <div id="recaptchaMount" data-sitekey="<?php echo htmlspecialchars(RECAPTCHA_SITE_KEY); ?>"></div>
+            <?php else: ?>
+            <div class="text-xs text-slate-500 dark:text-slate-400 px-1">Captcha is disabled for this environment.</div>
+            <?php endif; ?>
             <button type="button" id="qrScanBtn" class="btn-ghost qr-side" aria-label="Fast QR Login" title="Fast QR Login">
               <img src="qricon.png" alt="" class="qr-icon">
             </button>
