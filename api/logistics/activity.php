@@ -42,19 +42,74 @@ function logisticsTableExists(PDO $db, $tableName) {
     return (bool) $stmt->fetchColumn();
 }
 
-function getLogisticsSummary(PDO $db) {
+function logisticsGetColumns(PDO $db, $tableName) {
+    $stmt = $db->query("SHOW COLUMNS FROM `{$tableName}`");
+    $columns = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $columns[] = $row['Field'];
+    }
+    return $columns;
+}
+
+function logisticsColumnExists(array $columns, $name) {
+    return in_array($name, $columns, true);
+}
+
+function logisticsFirstColumn(array $columns, array $candidates) {
+    foreach ($candidates as $candidate) {
+        if (logisticsColumnExists($columns, $candidate)) {
+            return $candidate;
+        }
+    }
+    return null;
+}
+
+function logisticsQuotedColumn($alias, $column) {
+    if ($column === null) {
+        return null;
+    }
+    if ($alias === null || $alias === '') {
+        return '`' . $column . '`';
+    }
+    return $alias . '.`' . $column . '`';
+}
+
+function getLogisticsSummary(PDO $db, array $columns) {
+    $sourceColumn = logisticsFirstColumn($columns, ['source_system']);
+    $typeColumn = logisticsFirstColumn($columns, ['transaction_type']);
+    $amountColumn = logisticsFirstColumn($columns, ['amount', 'total_amount']);
+    $dateColumn = logisticsFirstColumn($columns, ['transaction_date', 'created_at', 'updated_at']);
+
+    if ($sourceColumn === null || $typeColumn === null) {
+        return [
+            'invoice_count' => 0,
+            'invoice_amount' => 0.0,
+            'purchase_order_count' => 0,
+            'purchase_order_amount' => 0.0,
+            'trip_count' => 0,
+            'trip_amount' => 0.0,
+            'total_amount' => 0.0,
+            'last_imported_at' => null,
+        ];
+    }
+
+    $sourceExpr = logisticsQuotedColumn('', $sourceColumn);
+    $typeExpr = logisticsQuotedColumn('', $typeColumn);
+    $amountExpr = $amountColumn !== null ? logisticsQuotedColumn('', $amountColumn) : '0';
+    $dateExpr = $dateColumn !== null ? logisticsQuotedColumn('', $dateColumn) : 'NULL';
+
     $stmt = $db->query("
         SELECT
-            SUM(CASE WHEN source_system = 'LOGISTICS1' AND transaction_type = 'supplier_invoice' THEN 1 ELSE 0 END) AS invoice_count,
-            COALESCE(SUM(CASE WHEN source_system = 'LOGISTICS1' AND transaction_type = 'supplier_invoice' THEN amount ELSE 0 END), 0) AS invoice_amount,
-            SUM(CASE WHEN source_system = 'LOGISTICS1' AND transaction_type = 'purchase_order' THEN 1 ELSE 0 END) AS purchase_order_count,
-            COALESCE(SUM(CASE WHEN source_system = 'LOGISTICS1' AND transaction_type = 'purchase_order' THEN amount ELSE 0 END), 0) AS purchase_order_amount,
-            SUM(CASE WHEN source_system = 'LOGISTICS2' AND transaction_type = 'transportation_expense' THEN 1 ELSE 0 END) AS trip_count,
-            COALESCE(SUM(CASE WHEN source_system = 'LOGISTICS2' AND transaction_type = 'transportation_expense' THEN amount ELSE 0 END), 0) AS trip_amount,
-            COALESCE(SUM(CASE WHEN source_system IN ('LOGISTICS1', 'LOGISTICS2') THEN amount ELSE 0 END), 0) AS total_amount,
-            MAX(transaction_date) AS last_imported_at
+            SUM(CASE WHEN {$sourceExpr} = 'LOGISTICS1' AND {$typeExpr} = 'supplier_invoice' THEN 1 ELSE 0 END) AS invoice_count,
+            COALESCE(SUM(CASE WHEN {$sourceExpr} = 'LOGISTICS1' AND {$typeExpr} = 'supplier_invoice' THEN {$amountExpr} ELSE 0 END), 0) AS invoice_amount,
+            SUM(CASE WHEN {$sourceExpr} = 'LOGISTICS1' AND {$typeExpr} = 'purchase_order' THEN 1 ELSE 0 END) AS purchase_order_count,
+            COALESCE(SUM(CASE WHEN {$sourceExpr} = 'LOGISTICS1' AND {$typeExpr} = 'purchase_order' THEN {$amountExpr} ELSE 0 END), 0) AS purchase_order_amount,
+            SUM(CASE WHEN {$sourceExpr} = 'LOGISTICS2' AND {$typeExpr} = 'transportation_expense' THEN 1 ELSE 0 END) AS trip_count,
+            COALESCE(SUM(CASE WHEN {$sourceExpr} = 'LOGISTICS2' AND {$typeExpr} = 'transportation_expense' THEN {$amountExpr} ELSE 0 END), 0) AS trip_amount,
+            COALESCE(SUM(CASE WHEN {$sourceExpr} IN ('LOGISTICS1', 'LOGISTICS2') THEN {$amountExpr} ELSE 0 END), 0) AS total_amount,
+            MAX({$dateExpr}) AS last_imported_at
         FROM imported_transactions
-        WHERE source_system IN ('LOGISTICS1', 'LOGISTICS2')
+        WHERE {$sourceExpr} IN ('LOGISTICS1', 'LOGISTICS2')
     ");
 
     $summary = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
@@ -71,21 +126,59 @@ function getLogisticsSummary(PDO $db) {
     ];
 }
 
-function getLogisticsTransactions(PDO $db, $limit) {
+function getLogisticsTransactions(PDO $db, $limit, array $columns, array $departmentColumns) {
+    $sourceColumn = logisticsFirstColumn($columns, ['source_system']);
+    if ($sourceColumn === null) {
+        return [];
+    }
+
+    $dateColumn = logisticsFirstColumn($columns, ['transaction_date', 'created_at', 'updated_at']);
+    $typeColumn = logisticsFirstColumn($columns, ['transaction_type']);
+    $referenceColumn = logisticsFirstColumn($columns, ['external_reference', 'external_id', 'reference_number', 'id']);
+    $descriptionColumn = logisticsFirstColumn($columns, ['description', 'external_reference', 'external_id']);
+    $amountColumn = logisticsFirstColumn($columns, ['amount', 'total_amount']);
+    $statusColumn = logisticsFirstColumn($columns, ['status']);
+    $departmentIdColumn = logisticsFirstColumn($columns, ['department_id']);
+
+    $dateExpr = $dateColumn !== null ? logisticsQuotedColumn('it', $dateColumn) : 'NULL';
+    $typeExpr = $typeColumn !== null ? logisticsQuotedColumn('it', $typeColumn) : "''";
+    $referenceExpr = $referenceColumn !== null ? logisticsQuotedColumn('it', $referenceColumn) : "''";
+    $descriptionExpr = $descriptionColumn !== null ? logisticsQuotedColumn('it', $descriptionColumn) : "''";
+    $amountExpr = $amountColumn !== null ? logisticsQuotedColumn('it', $amountColumn) : '0';
+    $statusExpr = $statusColumn !== null ? logisticsQuotedColumn('it', $statusColumn) : "'pending'";
+    $sourceExpr = logisticsQuotedColumn('it', $sourceColumn);
+
+    $joinDepartments = $departmentIdColumn !== null
+        && logisticsTableExists($db, 'departments')
+        && !empty($departmentColumns);
+
+    $departmentNameColumn = logisticsFirstColumn($departmentColumns, ['dept_name', 'department_name', 'name']);
+    $departmentExpr = $joinDepartments && $departmentNameColumn !== null
+        ? logisticsQuotedColumn('d', $departmentNameColumn)
+        : "'Unassigned'";
+
+    $joinSql = '';
+    if ($joinDepartments) {
+        $joinSql = ' LEFT JOIN departments d ON ' . logisticsQuotedColumn('it', $departmentIdColumn) . ' = d.id';
+    }
+
+    $orderDateExpr = $dateColumn !== null ? logisticsQuotedColumn('it', $dateColumn) : $referenceExpr;
+    $orderRefExpr = $referenceColumn !== null ? logisticsQuotedColumn('it', $referenceColumn) : $sourceExpr;
+
     $sql = "
         SELECT
-            it.transaction_date,
-            it.source_system,
-            it.transaction_type,
-            it.external_reference,
-            it.description,
-            it.amount,
-            it.status,
-            d.dept_name AS department_name
+            {$dateExpr} AS transaction_date,
+            {$sourceExpr} AS source_system,
+            {$typeExpr} AS transaction_type,
+            {$referenceExpr} AS external_reference,
+            {$descriptionExpr} AS description,
+            {$amountExpr} AS amount,
+            {$statusExpr} AS status,
+            {$departmentExpr} AS department_name
         FROM imported_transactions it
-        LEFT JOIN departments d ON it.department_id = d.id
-        WHERE it.source_system IN ('LOGISTICS1', 'LOGISTICS2')
-        ORDER BY it.transaction_date DESC, it.external_reference DESC
+        {$joinSql}
+        WHERE {$sourceExpr} IN ('LOGISTICS1', 'LOGISTICS2')
+        ORDER BY {$orderDateExpr} DESC, {$orderRefExpr} DESC
         LIMIT {$limit}
     ";
 
@@ -136,12 +229,21 @@ try {
         $limit = 100;
     }
 
+    $transactionColumns = logisticsGetColumns($db, 'imported_transactions');
+    $departmentColumns = logisticsTableExists($db, 'departments')
+        ? logisticsGetColumns($db, 'departments')
+        : [];
+
     logisticsSend([
         'success' => true,
-        'summary' => getLogisticsSummary($db),
-        'transactions' => getLogisticsTransactions($db, $limit),
+        'summary' => getLogisticsSummary($db, $transactionColumns),
+        'transactions' => getLogisticsTransactions($db, $limit, $transactionColumns, $departmentColumns),
     ]);
 } catch (Throwable $e) {
-    Logger::getInstance()->logDatabaseError('Logistics activity API', $e->getMessage());
-    logisticsSend(['success' => false, 'error' => 'Failed to load logistics activity'], 500);
+    try {
+        Logger::getInstance()->logDatabaseError('Logistics activity API', $e->getMessage());
+    } catch (Throwable $loggingError) {
+        // Ignore logging failures so the API can still return the original error.
+    }
+    logisticsSend(['success' => false, 'error' => 'Failed to load logistics activity: ' . $e->getMessage()], 500);
 }
