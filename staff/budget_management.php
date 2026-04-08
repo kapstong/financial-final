@@ -9,6 +9,13 @@ if (!isset($_SESSION['user'])) {
 
 // Initialize database connection
 $db = Database::getInstance()->getConnection();
+
+$budgetRequestedByName = trim(
+    ($_SESSION['user']['first_name'] ?? '') . ' ' . ($_SESSION['user']['last_name'] ?? '')
+);
+if ($budgetRequestedByName === '') {
+    $budgetRequestedByName = $_SESSION['user']['full_name'] ?? ($_SESSION['user']['username'] ?? 'User');
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -550,6 +557,14 @@ $db = Database::getInstance()->getConnection();
 
         /* Enhanced Responsive Design */
         @media (max-width: 768px) {
+            .budget-overview-card .card-body {
+                grid-template-columns: 1fr;
+            }
+
+            .budget-overview-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
             .sidebar {
                 transform: translateX(-100%);
                 transition: transform 0.3s ease;
@@ -667,6 +682,154 @@ $db = Database::getInstance()->getConnection();
         .forecast-card .card-body {
             padding: 2.5rem;
         }
+
+        .budget-overview-card {
+            margin-bottom: 1.5rem;
+            overflow: hidden;
+        }
+
+        .budget-overview-card .card-body {
+            display: grid;
+            grid-template-columns: minmax(240px, 1.2fr) minmax(0, 1.8fr);
+            gap: 1.5rem;
+            align-items: center;
+            padding: 1.5rem 1.75rem;
+        }
+
+        .budget-overview-copy h4 {
+            margin: 0 0 0.35rem;
+            color: #1e2936;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+        }
+
+        .budget-overview-copy p {
+            margin: 0;
+            color: #64748b;
+            max-width: 42rem;
+        }
+
+        .budget-overview-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 0.85rem;
+        }
+
+        .budget-overview-pill {
+            background: linear-gradient(145deg, rgba(30, 41, 54, 0.04), rgba(255, 255, 255, 0.92));
+            border: 1px solid rgba(30, 41, 54, 0.08);
+            border-radius: 16px;
+            padding: 1rem 1.1rem;
+            min-height: 106px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: 0.45rem;
+        }
+
+        .budget-overview-pill span {
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: #64748b;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .budget-overview-pill strong {
+            font-size: 1.55rem;
+            line-height: 1;
+            color: #1e2936;
+            font-weight: 800;
+        }
+
+        .budget-overview-pill small {
+            color: #64748b;
+            font-size: 0.82rem;
+        }
+
+        .budget-source-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            margin-left: 0.55rem;
+            padding: 0.2rem 0.55rem;
+            border-radius: 999px;
+            background: rgba(30, 41, 54, 0.08);
+            color: #334155;
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        .budget-source-badge.external {
+            background: rgba(59, 130, 246, 0.12);
+            color: #1d4ed8;
+        }
+
+        .budget-source-badge.local {
+            background: rgba(16, 185, 129, 0.12);
+            color: #047857;
+        }
+
+        .report-results-card {
+            display: none;
+        }
+
+        .report-results-card.is-visible {
+            display: block;
+        }
+
+        .report-content table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        .report-content th,
+        .report-content td {
+            border-bottom: 1px solid #e9ecef;
+            padding: 0.75rem 0.5rem;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        .report-content th {
+            color: #1e2936;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        .report-summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .report-summary-item {
+            border: 1px solid #e9ecef;
+            border-radius: 12px;
+            padding: 0.9rem 1rem;
+            background: #fff;
+        }
+
+        .report-summary-item span {
+            display: block;
+            color: #64748b;
+            font-size: 0.78rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 0.35rem;
+        }
+
+        .report-summary-item strong {
+            color: #1e2936;
+            font-size: 1.15rem;
+            font-weight: 800;
+        }
     </style>
 </head>
 <body>
@@ -675,6 +838,37 @@ $db = Database::getInstance()->getConnection();
     <div class="content">
         <!-- Top Navbar -->
         <?php include '../includes/global_navbar.php'; ?>
+
+        <div class="card budget-overview-card">
+            <div class="card-body">
+                <div class="budget-overview-copy">
+                    <h4>Budget Command Center</h4>
+                    <p>Manage local budgets, monitor live allocation pressure, and keep HR3-linked spending visible before it becomes a problem.</p>
+                </div>
+                <div class="budget-overview-grid">
+                    <div class="budget-overview-pill">
+                        <span>Budgets</span>
+                        <strong id="overviewBudgetCount">0</strong>
+                        <small id="overviewBudgetMix">No budget records loaded yet</small>
+                    </div>
+                    <div class="budget-overview-pill">
+                        <span>Budgeted Value</span>
+                        <strong id="overviewBudgetValue">PHP 0</strong>
+                        <small id="overviewBudgetValueMeta">Across local and linked plans</small>
+                    </div>
+                    <div class="budget-overview-pill">
+                        <span>Utilization Rate</span>
+                        <strong id="overviewUtilizationRate">0%</strong>
+                        <small id="overviewUtilizationMeta">Based on visible allocations</small>
+                    </div>
+                    <div class="budget-overview-pill">
+                        <span>Open Alerts</span>
+                        <strong id="overviewAlertCount">0</strong>
+                        <small id="overviewAlertMeta">No thresholds triggered</small>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <!-- Navigation Tabs -->
         <ul class="nav nav-tabs mb-4" id="budgetTabs" role="tablist">
@@ -1045,7 +1239,7 @@ $db = Database::getInstance()->getConnection();
                                     </table>
                                 </div>
                                 <div class="d-flex justify-content-end">
-                                    <button class="btn btn-outline-primary btn-sm"><i class="fas fa-link me-2"></i>Open HR3 Claims Review</button>
+                                    <a class="btn btn-outline-primary btn-sm" href="hr3_budget_allocation.php"><i class="fas fa-link me-2"></i>Open HR3 Claims Review</a>
                                 </div>
                             </div>
                         </div>
@@ -1161,7 +1355,7 @@ $db = Database::getInstance()->getConnection();
             <div class="tab-pane fade" id="reports" role="tabpanel" aria-labelledby="reports-tab">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h6 class="mb-0">Budget Reports & Analytics</h6>
-                    <button class="btn btn-outline-secondary"><i class="fas fa-download me-2"></i>Export Reports</button>
+                    <button class="btn btn-outline-secondary" id="exportReportsBtn"><i class="fas fa-download me-2"></i>Export Current Report</button>
                 </div>
                 <div class="row">
                     <div class="col-md-6">
@@ -1171,7 +1365,7 @@ $db = Database::getInstance()->getConnection();
                             </div>
                             <div class="card-body">
                                 <p>Detailed variance breakdown by department and category with month-over-month trends.</p>
-                                <button class="btn btn-primary">Generate Report</button>
+                                <button class="btn btn-primary" id="generateBudgetVsActualBtn">Generate Report</button>
                             </div>
                         </div>
                     </div>
@@ -1182,7 +1376,7 @@ $db = Database::getInstance()->getConnection();
                             </div>
                             <div class="card-body">
                                 <p>Summarizes HR3 claim volumes, approvals, and budget impact across departments.</p>
-                                <button class="btn btn-primary">Generate Report</button>
+                                <button class="btn btn-primary" id="generateClaimsImpactBtn">Generate Report</button>
                             </div>
                         </div>
                     </div>
@@ -1195,7 +1389,7 @@ $db = Database::getInstance()->getConnection();
                             </div>
                             <div class="card-body">
                                 <p>Highlights departments trending over budget with recommended actions.</p>
-                                <button class="btn btn-primary">Generate Report</button>
+                                <button class="btn btn-primary" id="generateDeptPerformanceBtn">Generate Report</button>
                             </div>
                         </div>
                     </div>
@@ -1206,8 +1400,22 @@ $db = Database::getInstance()->getConnection();
                             </div>
                             <div class="card-body">
                                 <p>Rolling 90-day forecast with risk flags for claims-heavy departments.</p>
-                                <button class="btn btn-primary">Generate Report</button>
+                                <button class="btn btn-primary" id="generateForecastSnapshotBtn">Generate Report</button>
                             </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row mt-4 report-results-card" id="reportResults">
+                    <div class="col-md-12">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h6 class="mb-0" id="reportTitle">Report Results</h6>
+                                <div class="d-flex gap-2">
+                                    <button class="btn btn-sm btn-outline-secondary" id="printReportBtn"><i class="fas fa-print me-2"></i>Print</button>
+                                    <button class="btn btn-sm btn-outline-secondary" id="closeReportBtn"><i class="fas fa-times me-2"></i>Close</button>
+                                </div>
+                            </div>
+                            <div class="card-body report-content" id="reportContent"></div>
                         </div>
                     </div>
                 </div>
@@ -1217,7 +1425,7 @@ $db = Database::getInstance()->getConnection();
             <div class="tab-pane fade" id="audit" role="tabpanel" aria-labelledby="audit-tab">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h6 class="mb-0">Budget Audit Trail</h6>
-                    <button class="btn btn-outline-secondary"><i class="fas fa-filter me-2"></i>Filter Logs</button>
+                    <button class="btn btn-outline-secondary" id="auditRefreshButton"><i class="fas fa-sync me-2"></i>Refresh Logs</button>
                 </div>
                 <div class="card">
                     <div class="card-body">
@@ -1287,6 +1495,7 @@ $db = Database::getInstance()->getConnection();
         let vendors = [];
         let currentAlerts = [];
         let currentHr3ClaimsBreakdown = null;
+        let currentReport = null;
 
         // Initialize sidebar state on page load
         document.addEventListener('DOMContentLoaded', function() {
@@ -1324,12 +1533,13 @@ $db = Database::getInstance()->getConnection();
             loadVendors();
             loadClaimsData();
             loadAuditTrail();
+            startVendorPolling();
         });
 
         // Load budgets
         async function loadBudgets() {
             try {
-                const response = await fetch('../api/budgets.php');
+                const response = await fetch('../api/budgets.php?source=all');
                 const data = await response.json();
 
                 if (data.error) {
@@ -1339,6 +1549,7 @@ $db = Database::getInstance()->getConnection();
                 currentBudgets = data.budgets || [];
                 renderBudgetsTable();
                 populateBudgetDropdowns(currentBudgets);
+                updateBudgetOverview();
 
             } catch (error) {
                 console.error('Error loading budgets:', error);
@@ -1365,18 +1576,24 @@ $db = Database::getInstance()->getConnection();
                 const utilizedLabel = budget.utilized_amount != null
                     ? `PHP ${parseFloat(budget.utilized_amount || 0).toLocaleString()}`
                     : 'N/A';
+                const sourceBadge = budget.is_external
+                    ? '<span class="budget-source-badge external">External</span>'
+                    : '<span class="budget-source-badge local">Local</span>';
+                const actions = budget.is_external
+                    ? `<button class="btn btn-sm btn-outline-primary" onclick="viewBudget('${budget.id}')">View</button>`
+                    : `
+                        <button class="btn btn-sm btn-outline-primary" onclick="viewBudget('${budget.id}')">View</button>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="editBudget('${budget.id}')">Edit</button>
+                    `;
                 const row = `
                     <tr>
-                        <td>${budget.name}</td>
+                        <td><strong>${budget.name}</strong>${sourceBadge}</td>
                         <td>${formatBudgetPeriod(budget.start_date, budget.end_date)}</td>
                         <td>${ownerName}</td>
                         <td>PHP ${parseFloat(budget.total_amount || 0).toLocaleString()}</td>
                         <td>${utilizedLabel}</td>
                         <td>${statusBadge}</td>
-                        <td>
-                            <button class="btn btn-sm btn-outline-primary" onclick="viewBudget(${budget.id})">View</button>
-                            <button class="btn btn-sm btn-outline-secondary" onclick="editBudget(${budget.id})">Edit</button>
-                        </td>
+                        <td>${actions}</td>
                     </tr>
                 `;
                 tbody.innerHTML += row;
@@ -1398,6 +1615,7 @@ $db = Database::getInstance()->getConnection();
                 updateAllocationSummary();
                 renderClaimsSummary();
                 renderClaimsOverBudget();
+                updateBudgetOverview();
 
             } catch (error) {
                 console.error('Error loading allocations:', error);
@@ -1467,6 +1685,53 @@ $db = Database::getInstance()->getConnection();
             if (utilizedEl) utilizedEl.textContent = `PHP ${totalUtilized.toLocaleString()}`;
             if (remainingEl) remainingEl.textContent = `PHP ${totalRemaining.toLocaleString()}`;
             if (rateEl) rateEl.textContent = `${utilizationRate.toFixed(1)}%`;
+        }
+
+        function updateBudgetOverview() {
+            const budgetCountEl = document.getElementById('overviewBudgetCount');
+            const budgetMixEl = document.getElementById('overviewBudgetMix');
+            const budgetValueEl = document.getElementById('overviewBudgetValue');
+            const utilizationRateEl = document.getElementById('overviewUtilizationRate');
+            const utilizationMetaEl = document.getElementById('overviewUtilizationMeta');
+            const alertCountEl = document.getElementById('overviewAlertCount');
+            const alertMetaEl = document.getElementById('overviewAlertMeta');
+
+            const totalBudgets = currentBudgets.length;
+            const localBudgets = currentBudgets.filter(item => !item.is_external).length;
+            const externalBudgets = totalBudgets - localBudgets;
+            const totalBudgetValue = currentBudgets.reduce((sum, item) => sum + (parseFloat(item.total_amount) || 0), 0);
+            const overviewAllocations = document.getElementById('allocationSearch')
+                ? getFilteredAllocations()
+                : currentAllocations;
+            const allocationTotals = overviewAllocations.reduce((acc, item) => {
+                acc.total += parseFloat(item.total_amount) || 0;
+                acc.utilized += parseFloat(item.utilized_amount) || 0;
+                return acc;
+            }, { total: 0, utilized: 0 });
+            const utilizationRate = allocationTotals.total > 0
+                ? (allocationTotals.utilized / allocationTotals.total) * 100
+                : 0;
+
+            if (budgetCountEl) budgetCountEl.textContent = totalBudgets.toLocaleString();
+            if (budgetMixEl) budgetMixEl.textContent = `${localBudgets} local / ${externalBudgets} linked`;
+            if (budgetValueEl) budgetValueEl.textContent = `PHP ${totalBudgetValue.toLocaleString()}`;
+            if (utilizationRateEl) utilizationRateEl.textContent = `${utilizationRate.toFixed(1)}%`;
+            if (utilizationMetaEl) {
+                utilizationMetaEl.textContent = allocationTotals.total > 0
+                    ? `PHP ${(allocationTotals.total - allocationTotals.utilized).toLocaleString()} remaining`
+                    : 'No tracked allocations yet';
+            }
+            if (alertCountEl) alertCountEl.textContent = currentAlerts.length.toLocaleString();
+            if (alertMetaEl) {
+                if (!currentAlerts.length) {
+                    alertMetaEl.textContent = 'No thresholds triggered';
+                } else {
+                    const severityRank = { red: 4, orange: 3, light_orange: 2, yellow: 1 };
+                    const topAlert = [...currentAlerts].sort((left, right) => (severityRank[right.severity] || 0) - (severityRank[left.severity] || 0))[0];
+                    const highestSeverity = topAlert?.severity_label || topAlert?.severity || 'Alert';
+                    alertMetaEl.textContent = `Highest severity: ${highestSeverity}`;
+                }
+            }
         }
 
         function getFilteredAllocations() {
@@ -1699,6 +1964,7 @@ $db = Database::getInstance()->getConnection();
 
             const departmentBreakdown = currentHr3ClaimsBreakdown.summary.department_breakdown || {};
             const departments = Object.keys(departmentBreakdown);
+            const claims = Array.isArray(currentHr3ClaimsBreakdown.claims) ? currentHr3ClaimsBreakdown.claims : [];
 
             if (departments.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No claims data available.</td></tr>';
@@ -1708,8 +1974,10 @@ $db = Database::getInstance()->getConnection();
             tbody.innerHTML = '';
             departments.forEach(department => {
                 const data = departmentBreakdown[department] || {};
-                const claimCount = data.claim_count || 0;
                 const totalAmount = data.total_amount || 0;
+                const departmentClaims = claims.filter(claim => claim.department === department);
+                const approvedClaims = departmentClaims.filter(claim => claim.status === 'approved').length;
+                const pendingClaims = departmentClaims.filter(claim => claim.status === 'pending').length;
                 const remaining = getAllocationRemaining(department);
                 const remainingLabel = remaining == null ? 'N/A' : `PHP ${parseFloat(remaining || 0).toLocaleString()}`;
                 const status = getClaimsBudgetStatus(remaining, totalAmount);
@@ -1717,8 +1985,8 @@ $db = Database::getInstance()->getConnection();
                 const row = `
                     <tr>
                         <td>${department}</td>
-                        <td>${claimCount}</td>
-                        <td>0</td>
+                        <td>${approvedClaims}</td>
+                        <td>${pendingClaims}</td>
                         <td>PHP ${parseFloat(totalAmount || 0).toLocaleString()}</td>
                         <td>${remainingLabel}</td>
                         <td><span class="badge ${status.className}">${status.label}</span></td>
@@ -1980,7 +2248,7 @@ $db = Database::getInstance()->getConnection();
 
         async function updateBudget(budgetId, formData) {
             try {
-                const response = await fetch(`api/budgets.php?id=${budgetId}`, {
+                const response = await fetch(`../api/budgets.php?id=${encodeURIComponent(budgetId)}`, {
                     method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json'
@@ -2132,7 +2400,7 @@ $db = Database::getInstance()->getConnection();
 
         async function updateAdjustment(adjustmentId, formData) {
             try {
-                const response = await fetch(`api/budgets.php?id=${adjustmentId}`, {
+                const response = await fetch(`../api/budgets.php?id=${encodeURIComponent(adjustmentId)}`, {
                     method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json'
@@ -2173,7 +2441,7 @@ $db = Database::getInstance()->getConnection();
                 'Are you sure you want to delete this adjustment? This action cannot be undone.',
                 async () => {
                     try {
-                        const response = await fetch(`api/budgets.php?action=adjustment&id=${adjustmentId}`, {
+                        const response = await fetch(`../api/budgets.php?action=adjustment&id=${encodeURIComponent(adjustmentId)}`, {
                             method: 'DELETE'
                         });
 
@@ -2433,6 +2701,75 @@ $db = Database::getInstance()->getConnection();
             if (auditTab) {
                 auditTab.addEventListener('shown.bs.tab', function() {
                     loadAuditTrail();
+                });
+            }
+
+            const auditRefreshButton = document.getElementById('auditRefreshButton');
+            if (auditRefreshButton) {
+                auditRefreshButton.addEventListener('click', function() {
+                    loadAuditTrail();
+                });
+            }
+
+            const allocationSearch = document.getElementById('allocationSearch');
+            if (allocationSearch) {
+                allocationSearch.addEventListener('input', function() {
+                    renderAllocationsTable();
+                    updateAllocationSummary();
+                    updateBudgetOverview();
+                });
+            }
+
+            const allocationStatusFilter = document.getElementById('allocationStatusFilter');
+            if (allocationStatusFilter) {
+                allocationStatusFilter.addEventListener('change', function() {
+                    renderAllocationsTable();
+                    updateAllocationSummary();
+                    updateBudgetOverview();
+                });
+            }
+
+            const alertsFilter = document.getElementById('alertsFilter');
+            if (alertsFilter) {
+                alertsFilter.addEventListener('change', function() {
+                    renderAlertsTable();
+                });
+            }
+
+            const generateBudgetVsActualBtn = document.getElementById('generateBudgetVsActualBtn');
+            if (generateBudgetVsActualBtn) {
+                generateBudgetVsActualBtn.addEventListener('click', generateBudgetVsActualReport);
+            }
+
+            const generateClaimsImpactBtn = document.getElementById('generateClaimsImpactBtn');
+            if (generateClaimsImpactBtn) {
+                generateClaimsImpactBtn.addEventListener('click', generateClaimsImpactReport);
+            }
+
+            const generateDeptPerformanceBtn = document.getElementById('generateDeptPerformanceBtn');
+            if (generateDeptPerformanceBtn) {
+                generateDeptPerformanceBtn.addEventListener('click', generateDepartmentPerformanceReport);
+            }
+
+            const generateForecastSnapshotBtn = document.getElementById('generateForecastSnapshotBtn');
+            if (generateForecastSnapshotBtn) {
+                generateForecastSnapshotBtn.addEventListener('click', generateForecastSnapshotReport);
+            }
+
+            const exportReportsBtn = document.getElementById('exportReportsBtn');
+            if (exportReportsBtn) {
+                exportReportsBtn.addEventListener('click', exportCurrentReport);
+            }
+
+            const closeReportBtn = document.getElementById('closeReportBtn');
+            if (closeReportBtn) {
+                closeReportBtn.addEventListener('click', closeReport);
+            }
+
+            const printReportBtn = document.getElementById('printReportBtn');
+            if (printReportBtn) {
+                printReportBtn.addEventListener('click', function() {
+                    window.print();
                 });
             }
         });
@@ -2697,6 +3034,7 @@ $db = Database::getInstance()->getConnection();
             const budgetSelects = [
                 'allocationBudget', 'adjustmentBudget'
             ];
+            const localBudgets = budgets.filter(budget => !budget.is_external);
 
             budgetSelects.forEach(selectId => {
                 const select = document.getElementById(selectId);
@@ -2704,7 +3042,7 @@ $db = Database::getInstance()->getConnection();
                     return;
                 }
                 select.innerHTML = '<option value="">Select Budget</option>';
-                budgets.forEach(budget => {
+                localBudgets.forEach(budget => {
                     select.innerHTML += `<option value="${budget.id}">${budget.name}</option>`;
                 });
             });
@@ -2723,6 +3061,7 @@ $db = Database::getInstance()->getConnection();
                 currentAlerts = data.alerts || [];
                 renderAlertsTable();
                 updateAlertsCards();
+                updateBudgetOverview();
                 showThresholdToast();
 
             } catch (error) {
@@ -2838,67 +3177,318 @@ $db = Database::getInstance()->getConnection();
             new bootstrap.Modal(modalEl).show();
         }
 
-        // Update initialize section to start polling
-        document.addEventListener('DOMContentLoaded', function() {
-            // Start polling for vendor updates (check every 10 seconds)
-            startVendorPolling();
-        });
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
 
-        // Event listeners for dynamic functionality
-        document.addEventListener('DOMContentLoaded', function() {
-            // Handle create budget form submission
-            const createBudgetForm = document.getElementById('createBudgetForm');
-            if (createBudgetForm) {
-                createBudgetForm.addEventListener('submit', function(e) {
-                    e.preventDefault();
+        function buildReportSummaryItems(items) {
+            return `
+                <div class="report-summary-grid">
+                    ${items.map(item => `
+                        <div class="report-summary-item">
+                            <span>${escapeHtml(item.label)}</span>
+                            <strong>${escapeHtml(item.value)}</strong>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
 
-                    const formData = new FormData(this);
-                    const budgetData = {
-                        name: formData.get('budgetName'),
-                        department_id: formData.get('department_id') || null,
-                        vendor_id: formData.get('vendor_id') || null,
-                        start_date: formData.get('startDate'),
-                        end_date: formData.get('endDate'),
-                        total_amount: parseFloat(formData.get('totalAmount')),
-                        description: formData.get('budgetDescription')
+        function showReport(title, html, exportRows = []) {
+            const reportCard = document.getElementById('reportResults');
+            const reportTitle = document.getElementById('reportTitle');
+            const reportContent = document.getElementById('reportContent');
+            if (!reportCard || !reportTitle || !reportContent) {
+                return;
+            }
+
+            currentReport = { title, rows: exportRows };
+            reportTitle.textContent = title;
+            reportContent.innerHTML = html;
+            reportCard.classList.add('is-visible');
+            reportCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        function closeReport() {
+            const reportCard = document.getElementById('reportResults');
+            const reportContent = document.getElementById('reportContent');
+            if (reportCard) {
+                reportCard.classList.remove('is-visible');
+            }
+            if (reportContent) {
+                reportContent.innerHTML = '';
+            }
+            currentReport = null;
+        }
+
+        function exportCurrentReport() {
+            if (!currentReport || !Array.isArray(currentReport.rows) || !currentReport.rows.length) {
+                showAlert('Generate a report before exporting.', 'warning');
+                return;
+            }
+
+            const headers = Object.keys(currentReport.rows[0]);
+            const csv = [
+                headers.join(','),
+                ...currentReport.rows.map(row => headers.map(header => {
+                    const normalized = String(row[header] ?? '').replace(/"/g, '""');
+                    return `"${normalized}"`;
+                }).join(','))
+            ].join('\n');
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = currentReport.title.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '.csv';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
+
+        function generateBudgetVsActualReport() {
+            if (!currentTrackingData.length) {
+                showAlert('No tracking data is available yet.', 'warning');
+                return;
+            }
+
+            const totalBudget = currentTrackingData.reduce((sum, item) => sum + (parseFloat(item.budget_amount) || 0), 0);
+            const totalActual = currentTrackingData.reduce((sum, item) => sum + (parseFloat(item.actual_amount) || 0), 0);
+            const variance = totalActual - totalBudget;
+
+            showReport(
+                'Budget vs Actual Report',
+                `
+                    ${buildReportSummaryItems([
+                        { label: 'Budgeted', value: 'PHP ' + totalBudget.toLocaleString() },
+                        { label: 'Actual', value: 'PHP ' + totalActual.toLocaleString() },
+                        { label: 'Variance', value: 'PHP ' + variance.toLocaleString() }
+                    ])}
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Category</th>
+                                <th>Budget</th>
+                                <th>Actual</th>
+                                <th>Variance</th>
+                                <th>Variance %</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${currentTrackingData.map(item => {
+                                const budget = parseFloat(item.budget_amount) || 0;
+                                const actual = parseFloat(item.actual_amount) || 0;
+                                const rowVariance = actual - budget;
+                                const rowVariancePercent = budget > 0 ? (rowVariance / budget) * 100 : 0;
+                                return `
+                                    <tr>
+                                        <td>${escapeHtml(item.category)}</td>
+                                        <td>PHP ${budget.toLocaleString()}</td>
+                                        <td>PHP ${actual.toLocaleString()}</td>
+                                        <td>PHP ${rowVariance.toLocaleString()}</td>
+                                        <td>${rowVariancePercent.toFixed(1)}%</td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                `,
+                currentTrackingData.map(item => {
+                    const budget = parseFloat(item.budget_amount) || 0;
+                    const actual = parseFloat(item.actual_amount) || 0;
+                    const rowVariance = actual - budget;
+                    return {
+                        Category: item.category,
+                        Budget: budget.toFixed(2),
+                        Actual: actual.toFixed(2),
+                        Variance: rowVariance.toFixed(2),
+                        VariancePercent: (budget > 0 ? (rowVariance / budget) * 100 : 0).toFixed(2)
                     };
+                })
+            );
+        }
 
-                    createBudget(budgetData);
-                });
+        function generateDepartmentPerformanceReport() {
+            if (!currentAllocations.length) {
+                showAlert('No allocation data is available yet.', 'warning');
+                return;
             }
 
-            // Handle tracking period change
-            const trackingPeriodSelect = document.querySelector('#tracking select');
-            if (trackingPeriodSelect) {
-                trackingPeriodSelect.addEventListener('change', function() {
-                    loadTrackingData();
-                });
+            const ranked = [...currentAllocations].sort((left, right) => {
+                const leftRate = left.total_amount > 0 ? (left.utilized_amount / left.total_amount) : 0;
+                const rightRate = right.total_amount > 0 ? (right.utilized_amount / right.total_amount) : 0;
+                return rightRate - leftRate;
+            });
+
+            showReport(
+                'Department Performance Report',
+                `
+                    ${buildReportSummaryItems([
+                        { label: 'Departments', value: ranked.length.toLocaleString() },
+                        { label: 'At Risk', value: ranked.filter(item => (item.total_amount > 0 ? (item.utilized_amount / item.total_amount) * 100 : 0) >= 80).length.toLocaleString() },
+                        { label: 'Healthy', value: ranked.filter(item => (item.total_amount > 0 ? (item.utilized_amount / item.total_amount) * 100 : 0) < 70).length.toLocaleString() }
+                    ])}
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Department</th>
+                                <th>Allocated</th>
+                                <th>Utilized</th>
+                                <th>Remaining</th>
+                                <th>Utilization %</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${ranked.map(item => {
+                                const utilization = item.total_amount > 0 ? (item.utilized_amount / item.total_amount) * 100 : 0;
+                                return `
+                                    <tr>
+                                        <td>${escapeHtml(item.department)}</td>
+                                        <td>PHP ${(parseFloat(item.total_amount) || 0).toLocaleString()}</td>
+                                        <td>PHP ${(parseFloat(item.utilized_amount) || 0).toLocaleString()}</td>
+                                        <td>PHP ${(parseFloat(item.remaining) || 0).toLocaleString()}</td>
+                                        <td>${utilization.toFixed(1)}%</td>
+                                        <td>${escapeHtml(getAllocationStatusKey(utilization))}</td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                `,
+                ranked.map(item => {
+                    const utilization = item.total_amount > 0 ? (item.utilized_amount / item.total_amount) * 100 : 0;
+                    return {
+                        Department: item.department,
+                        Allocated: (parseFloat(item.total_amount) || 0).toFixed(2),
+                        Utilized: (parseFloat(item.utilized_amount) || 0).toFixed(2),
+                        Remaining: (parseFloat(item.remaining) || 0).toFixed(2),
+                        UtilizationPercent: utilization.toFixed(2),
+                        Status: getAllocationStatusKey(utilization)
+                    };
+                })
+            );
+        }
+
+        function generateClaimsImpactReport() {
+            if (!currentHr3ClaimsBreakdown || !Array.isArray(currentHr3ClaimsBreakdown.claims) || !currentHr3ClaimsBreakdown.claims.length) {
+                showAlert('No HR3 claims data is available yet.', 'warning');
+                return;
             }
 
-            const allocationSearch = document.getElementById('allocationSearch');
-            if (allocationSearch) {
-                allocationSearch.addEventListener('input', function() {
-                    renderAllocationsTable();
-                    updateAllocationSummary();
-                });
+            const claims = currentHr3ClaimsBreakdown.claims;
+            const totalClaims = claims.length;
+            const totalAmount = claims.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
+            const pendingCount = claims.filter(item => item.status === 'pending').length;
+
+            showReport(
+                'HR3 Claims Impact Report',
+                `
+                    ${buildReportSummaryItems([
+                        { label: 'Claims', value: totalClaims.toLocaleString() },
+                        { label: 'Total Amount', value: 'PHP ' + totalAmount.toLocaleString() },
+                        { label: 'Pending', value: pendingCount.toLocaleString() }
+                    ])}
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Claim ID</th>
+                                <th>Employee</th>
+                                <th>Department</th>
+                                <th>Amount</th>
+                                <th>Status</th>
+                                <th>Submitted</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${claims.map(item => `
+                                <tr>
+                                    <td>${escapeHtml(item.id)}</td>
+                                    <td>${escapeHtml(item.employee_name)}</td>
+                                    <td>${escapeHtml(item.department)}</td>
+                                    <td>PHP ${(parseFloat(item.amount) || 0).toLocaleString()}</td>
+                                    <td>${escapeHtml(item.status)}</td>
+                                    <td>${escapeHtml(item.date_submitted || 'N/A')}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `,
+                claims.map(item => ({
+                    ClaimId: item.id,
+                    Employee: item.employee_name,
+                    Department: item.department,
+                    Amount: (parseFloat(item.amount) || 0).toFixed(2),
+                    Status: item.status,
+                    Submitted: item.date_submitted || ''
+                }))
+            );
+        }
+
+        function generateForecastSnapshotReport() {
+            const riskyAllocations = currentAllocations
+                .filter(item => item.total_amount > 0)
+                .map(item => ({
+                    ...item,
+                    utilization: (item.utilized_amount / item.total_amount) * 100
+                }))
+                .sort((left, right) => right.utilization - left.utilization)
+                .slice(0, 8);
+
+            if (!riskyAllocations.length) {
+                showAlert('No allocation history is available for a forecast snapshot.', 'warning');
+                return;
             }
 
-            const allocationStatusFilter = document.getElementById('allocationStatusFilter');
-            if (allocationStatusFilter) {
-                allocationStatusFilter.addEventListener('change', function() {
-                    renderAllocationsTable();
-                    updateAllocationSummary();
-                });
-            }
-
-            // Handle alerts filter change
-            const alertsFilter = document.getElementById('alertsFilter');
-            if (alertsFilter) {
-                alertsFilter.addEventListener('change', function() {
-                    renderAlertsTable();
-                });
-            }
-        });
+            showReport(
+                'Forecast Snapshot Report',
+                `
+                    ${buildReportSummaryItems([
+                        { label: 'Tracked Departments', value: riskyAllocations.length.toLocaleString() },
+                        { label: 'Highest Utilization', value: riskyAllocations[0].utilization.toFixed(1) + '%' },
+                        { label: 'Watchlist', value: riskyAllocations.filter(item => item.utilization >= 80).length.toLocaleString() }
+                    ])}
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Department</th>
+                                <th>Allocated</th>
+                                <th>Utilized</th>
+                                <th>Remaining</th>
+                                <th>Utilization %</th>
+                                <th>Flag</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${riskyAllocations.map(item => `
+                                <tr>
+                                    <td>${escapeHtml(item.department)}</td>
+                                    <td>PHP ${(parseFloat(item.total_amount) || 0).toLocaleString()}</td>
+                                    <td>PHP ${(parseFloat(item.utilized_amount) || 0).toLocaleString()}</td>
+                                    <td>PHP ${(parseFloat(item.remaining) || 0).toLocaleString()}</td>
+                                    <td>${item.utilization.toFixed(1)}%</td>
+                                    <td>${item.utilization >= 100 ? 'Immediate action' : (item.utilization >= 80 ? 'Watch closely' : 'Stable')}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `,
+                riskyAllocations.map(item => ({
+                    Department: item.department,
+                    Allocated: (parseFloat(item.total_amount) || 0).toFixed(2),
+                    Utilized: (parseFloat(item.utilized_amount) || 0).toFixed(2),
+                    Remaining: (parseFloat(item.remaining) || 0).toFixed(2),
+                    UtilizationPercent: item.utilization.toFixed(2),
+                    Flag: item.utilization >= 100 ? 'Immediate action' : (item.utilization >= 80 ? 'Watch closely' : 'Stable')
+                }))
+            );
+        }
 
         // Polling function to check for vendor updates
         function startVendorPolling() {
@@ -3129,7 +3719,7 @@ $db = Database::getInstance()->getConnection();
                             <div class="col-md-6">
                                 <div class="mb-3">
                                     <label for="requestedBy" class="form-label">Requested By</label>
-                                    <input type="text" class="form-control" id="requestedBy" name="requestedBy" value="Admin" readonly>
+                                    <input type="text" class="form-control" id="requestedBy" name="requestedBy" value="<?php echo htmlspecialchars($budgetRequestedByName); ?>" readonly>
                                 </div>
                             </div>
                             <div class="col-md-6">

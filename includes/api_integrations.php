@@ -305,6 +305,30 @@ abstract class BaseIntegration {
     protected $requiredConfig = [];
     protected $webhookSupport = false;
 
+    protected function buildResponsePreview($response, $maxLength = 220) {
+        $preview = trim(strip_tags((string) $response));
+        $preview = preg_replace('/\s+/', ' ', $preview);
+
+        if ($preview === '') {
+            return '';
+        }
+
+        if (strlen($preview) > $maxLength) {
+            return substr($preview, 0, $maxLength - 3) . '...';
+        }
+
+        return $preview;
+    }
+
+    protected function buildInvalidResponseMessage($systemLabel, $response) {
+        $preview = $this->buildResponsePreview($response);
+        if ($preview === '') {
+            return "Invalid response from {$systemLabel}";
+        }
+
+        return "Invalid response from {$systemLabel}: {$preview}";
+    }
+
     /**
      * Validate configuration
      */
@@ -2274,48 +2298,7 @@ class Logistics1Integration extends BaseIntegration {
 
     public function testConnection($config) {
         try {
-            $ch = curl_init($config['api_url']);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-
-            // Add browser-like headers to avoid blocking
-            $headers = [
-                'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language: en-US,en;q=0.5',
-                'Accept-Encoding: gzip, deflate',
-                'DNT: 1',
-                'Connection: keep-alive',
-                'Upgrade-Insecure-Requests: 1'
-            ];
-            curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-
-            $response = curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-
-            if ($httpCode !== 200) {
-                return ['success' => false, 'message' => 'HTTP ' . $httpCode];
-            }
-
-            $data = json_decode($response, true);
-            if ($data === null && json_last_error() !== JSON_ERROR_NONE) {
-                return ['success' => false, 'message' => 'Invalid response format'];
-            }
-
-            if (is_array($data) && !array_key_exists('success', $data)) {
-                $poCount = count($data);
-                return [
-                    'success' => true,
-                    'message' => "Connected successfully. Found {$poCount} purchase orders"
-                ];
-            }
-
-            if (!isset($data['success'])) {
-                return ['success' => false, 'message' => 'Invalid response format'];
-            }
-
+            $data = $this->getProcurementData($config);
             $poCount = count($data['purchase_orders'] ?? []);
             $drCount = count($data['delivery_receipts'] ?? []);
             $invCount = count($data['invoices'] ?? []);
@@ -2370,17 +2353,44 @@ class Logistics1Integration extends BaseIntegration {
 
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
         curl_close($ch);
+
+        if ($response === false || $curlError !== '') {
+            throw new Exception('Connection error to Logistics 1 API: ' . $curlError);
+        }
 
         if ($httpCode !== 200) {
             throw new Exception('Logistics 1 API returned HTTP ' . $httpCode);
         }
 
         $data = json_decode($response, true);
-        if (!$data || !isset($data['success']) || !$data['success']) {
-            throw new Exception('Invalid response from Logistics 1 API');
+        if (!is_array($data)) {
+            throw new Exception($this->buildInvalidResponseMessage('Logistics 1 API', $response));
         }
 
+        if (isset($data['data']) && is_array($data['data'])) {
+            $data = $data['data'];
+        }
+
+        if (array_is_list($data)) {
+            $data = ['purchase_orders' => $data];
+        }
+
+        if (isset($data['success']) && !$data['success']) {
+            $errorMessage = trim((string) ($data['error'] ?? $data['message'] ?? ''));
+            throw new Exception($errorMessage !== '' ? $errorMessage : $this->buildInvalidResponseMessage('Logistics 1 API', $response));
+        }
+
+        if (
+            !isset($data['purchase_orders'])
+            && !isset($data['invoices'])
+            && !isset($data['delivery_receipts'])
+        ) {
+            throw new Exception($this->buildInvalidResponseMessage('Logistics 1 API', $response));
+        }
+
+        $data['success'] = true;
         return $data;
     }
 
@@ -2642,24 +2652,7 @@ class Logistics2Integration extends BaseIntegration {
 
     public function testConnection($config) {
         try {
-            $ch = curl_init($config['api_url']);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-
-            $response = curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-
-            if ($httpCode !== 200) {
-                return ['success' => false, 'message' => 'HTTP ' . $httpCode];
-            }
-
-            $data = json_decode($response, true);
-            if (!isset($data['trips'])) {
-                return ['success' => false, 'message' => 'Invalid response format'];
-            }
-
+            $data = $this->getTripData($config);
             $tripCount = count($data['trips'] ?? []);
             $totalCost = floatval($data['summary']['grand_total'] ?? 0);
 
@@ -2702,15 +2695,33 @@ class Logistics2Integration extends BaseIntegration {
 
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
         curl_close($ch);
+
+        if ($response === false || $curlError !== '') {
+            throw new Exception('Connection error to Logistics 2 API: ' . $curlError);
+        }
 
         if ($httpCode !== 200) {
             throw new Exception('Logistics 2 API returned HTTP ' . $httpCode);
         }
 
         $data = json_decode($response, true);
-        if (!$data || !isset($data['trips'])) {
-            throw new Exception('Invalid response from Logistics 2 API');
+        if (!is_array($data)) {
+            throw new Exception($this->buildInvalidResponseMessage('Logistics 2 API', $response));
+        }
+
+        if (isset($data['data']) && is_array($data['data'])) {
+            $data = $data['data'];
+        }
+
+        if (isset($data['success']) && !$data['success']) {
+            $errorMessage = trim((string) ($data['error'] ?? $data['message'] ?? ''));
+            throw new Exception($errorMessage !== '' ? $errorMessage : $this->buildInvalidResponseMessage('Logistics 2 API', $response));
+        }
+
+        if (!isset($data['trips']) || !is_array($data['trips'])) {
+            throw new Exception($this->buildInvalidResponseMessage('Logistics 2 API', $response));
         }
 
         return $data;

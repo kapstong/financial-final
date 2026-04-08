@@ -2248,6 +2248,11 @@ body {
         };
 
         window.runLogisticsImport = async function(integrationName, actionName, buttonEl) {
+            const integrationLabels = {
+                logistics1: 'Logistics 1',
+                logistics2: 'Logistics 2'
+            };
+            const integrationLabel = integrationLabels[integrationName] || 'Logistics';
             const button = buttonEl && buttonEl.closest ? buttonEl.closest('button') : null;
             const originalText = button ? button.innerHTML : '';
 
@@ -2278,10 +2283,10 @@ body {
                     throw new Error(result.error || payload.error || 'Sync failed');
                 }
 
-                window.showAlert(payload.message || 'Logistics sync completed successfully.', 'success');
+                window.showAlert(payload.message || (integrationLabel + ' sync completed successfully.'), 'success');
                 await window.loadLogisticsActivity();
             } catch (error) {
-                window.showAlert('Error syncing logistics data: ' + error.message, 'danger');
+                window.showAlert('Error syncing ' + integrationLabel + ' data: ' + error.message, 'danger');
             } finally {
                 if (button) {
                     button.disabled = false;

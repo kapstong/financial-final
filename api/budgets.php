@@ -90,29 +90,54 @@ function handleGet($db, $logger) {
 }
 
 function getBudgets($db) {
-    $source = isset($_GET['source']) ? $_GET['source'] : 'external';
+    $source = isset($_GET['source']) ? $_GET['source'] : 'all';
     if ($source === 'internal') {
         getInternalBudgets($db);
         return;
     }
 
+    if ($source === 'external') {
+        $externalBudgets = fetchExternalBudgetRequests($db);
+        echo json_encode(['budgets' => $externalBudgets]);
+        return;
+    }
+
+    $internalBudgets = getInternalBudgetsArray($db);
     $externalBudgets = fetchExternalBudgetRequests($db);
-    echo json_encode(['budgets' => $externalBudgets]);
+    $budgets = array_merge($internalBudgets, $externalBudgets);
+
+    usort($budgets, function ($left, $right) {
+        $leftDate = $left['created_at'] ?? $left['start_date'] ?? '';
+        $rightDate = $right['created_at'] ?? $right['start_date'] ?? '';
+        return strcmp((string) $rightDate, (string) $leftDate);
+    });
+
+    echo json_encode(['budgets' => $budgets]);
 }
 
 function getInternalBudgets($db) {
+    echo json_encode(['budgets' => getInternalBudgetsArray($db)]);
+}
+
+function getInternalBudgetsArray($db) {
     // Get all budgets
     $stmt = $db->prepare("
         SELECT b.*,
                u1.full_name as created_by_name,
                u2.full_name as approved_by_name,
                d.dept_name as department_name,
-               v.company_name as vendor_name
+               v.company_name as vendor_name,
+               COALESCE(bt.utilized_amount, 0) as utilized_amount
         FROM budgets b
         LEFT JOIN users u1 ON b.created_by = u1.id
         LEFT JOIN users u2 ON b.approved_by = u2.id
         LEFT JOIN departments d ON b.department_id = d.id
         LEFT JOIN vendors v ON b.vendor_id = v.id
+        LEFT JOIN (
+            SELECT budget_id, COALESCE(SUM(actual_amount), 0) as utilized_amount
+            FROM budget_items
+            GROUP BY budget_id
+        ) bt ON bt.budget_id = b.id
         ORDER BY b.created_at DESC
     ");
     $stmt->execute();
@@ -125,9 +150,10 @@ function getInternalBudgets($db) {
         $budget['department'] = $budget['department_name'] ?: 'Unassigned';
         $budget['name'] = $budget['budget_name'];
         $budget['total_amount'] = $budget['total_budgeted'];
+        $budget['utilized_amount'] = (float) ($budget['utilized_amount'] ?? 0);
     }
 
-    echo json_encode(['budgets' => $budgets]);
+    return $budgets;
 }
 
 function getCategories($db) {
@@ -390,6 +416,10 @@ function formatExternalBudgetRequest($request, $system, $departmentCode) {
         ?? $request['total_amount']
         ?? $request['amount']
         ?? 0;
+    $utilizedAmount = $request['utilized_amount']
+        ?? $request['actual_amount']
+        ?? $request['spent']
+        ?? 0;
 
     $startDate = $request['start_date'] ?? $request['period_start'] ?? null;
     $endDate = $request['end_date'] ?? $request['period_end'] ?? null;
@@ -411,12 +441,14 @@ function formatExternalBudgetRequest($request, $system, $departmentCode) {
         'budget_year' => $year,
         'total_budgeted' => (float)$total,
         'total_amount' => (float)$total,
+        'utilized_amount' => (float)$utilizedAmount,
         'start_date' => $startDate ?: ($year . '-01-01'),
         'end_date' => $endDate ?: ($year . '-12-31'),
         'status' => $status,
         'department_name' => $departmentName,
         'department' => $departmentName,
         'created_by_name' => $createdBy,
+        'created_at' => $request['created_at'] ?? $request['requested_at'] ?? $request['date_created'] ?? null,
         'approved_by_name' => $request['approved_by'] ?? null,
         'is_external' => true,
         'external_source' => $system['system_code'],
