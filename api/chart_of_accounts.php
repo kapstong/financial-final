@@ -30,6 +30,28 @@ $db = Database::getInstance();
 $method = $_SERVER['REQUEST_METHOD'];
 $userId = $_SESSION['user']['id'];
 
+function normalizeChartOfAccountName($value) {
+    if (!is_string($value)) {
+        return $value;
+    }
+
+    return preg_replace('/\s*\(demo\)\s*$/i', '', trim($value));
+}
+
+function sanitizeChartOfAccountPayload($data) {
+    if (is_array($data)) {
+        foreach ($data as $key => $value) {
+            if ($key === 'account_name' && is_string($value)) {
+                $data[$key] = normalizeChartOfAccountName($value);
+            } else {
+                $data[$key] = sanitizeChartOfAccountPayload($value);
+            }
+        }
+    }
+
+    return $data;
+}
+
 try {
     switch ($method) {
         case 'GET':
@@ -47,7 +69,7 @@ try {
                     exit;
                 }
 
-                echo json_encode($account[0]);
+                echo json_encode(sanitizeChartOfAccountPayload($account[0]));
             } else {
                 // Get all accounts with optional filtering
                 $where = [];
@@ -78,7 +100,7 @@ try {
                     $params
                 );
 
-                echo json_encode($accounts);
+                echo json_encode(sanitizeChartOfAccountPayload($accounts));
             }
             break;
 
@@ -89,6 +111,7 @@ try {
             if (!$data) {
                 $data = $_POST;
             }
+            $data = sanitizeChartOfAccountPayload($data);
 
             // Validate required fields
             if (empty($data['account_code']) || empty($data['account_name']) || empty($data['account_type'])) {
@@ -155,6 +178,7 @@ try {
             if (!$data) {
                 $data = $_POST;
             }
+            $data = sanitizeChartOfAccountPayload($data);
 
             // Get current account
             $currentAccount = $db->select("SELECT * FROM chart_of_accounts WHERE id = ?", [$_GET['id']]);

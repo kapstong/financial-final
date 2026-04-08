@@ -11,6 +11,32 @@ if (!isset($_SESSION['user'])) {
 // Initialize database connection
 $db = Database::getInstance()->getConnection();
 
+if (!function_exists('sanitizeDemoSuffix')) {
+    function sanitizeDemoSuffix($value) {
+        if (!is_string($value)) {
+            return $value;
+        }
+
+        return preg_replace('/\s*\(demo\)\s*$/i', '', trim($value));
+    }
+}
+
+if (!function_exists('sanitizeDemoLabels')) {
+    function sanitizeDemoLabels($value) {
+        if (is_array($value)) {
+            foreach ($value as $key => $item) {
+                if (is_string($item) && in_array($key, ['account_name', 'name'], true)) {
+                    $value[$key] = sanitizeDemoSuffix($item);
+                } else {
+                    $value[$key] = sanitizeDemoLabels($item);
+                }
+            }
+        }
+
+        return $value;
+    }
+}
+
 // Trial balance date filters
 $trialPeriod = isset($_GET['trial_period']) ? strtolower(trim($_GET['trial_period'])) : 'monthly';
 $trialDateToInput = isset($_GET['trial_date']) ? trim($_GET['trial_date']) : date('Y-m-d');
@@ -326,9 +352,10 @@ try {
     }
 
     // Assign results to variables
-    $chartOfAccounts = $chartOfAccountsQuery;
-    $journalEntries = $journalEntriesQuery;
-    // $trialBalance is prepared above
+    $chartOfAccounts = sanitizeDemoLabels($chartOfAccountsQuery);
+    $journalEntries = sanitizeDemoLabels($journalEntriesQuery);
+    $trialBalance = sanitizeDemoLabels($trialBalance);
+    $trialBreakdown = sanitizeDemoLabels($trialBreakdown);
 
 } catch (Exception $e) {
     error_log("Database error in general_ledger.php: " . $e->getMessage());
@@ -340,6 +367,13 @@ try {
     $totalRevenue = 0;
     $totalExpenses = 0;
     $netProfit = 0;
+    $displayTotalAssets = 0;
+    $displayTotalLiabilities = 0;
+    $displayNetProfit = 0;
+    $netProfitLabel = 'Net Profit';
+    $retainedEarningsLabel = 'Retained Earnings';
+    $displayEquity = 0;
+    $equityLabel = 'Equity';
     $chartOfAccounts = [];
     $journalEntries = [];
     $trialBalance = [];

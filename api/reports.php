@@ -939,7 +939,23 @@ function calculateNetProfit($db, $dateFrom, $dateTo) {
     return $totalRevenue - $totalExpenses;
 }
 
+function sanitizeReportDisplayLabels($value) {
+    if (is_array($value)) {
+        foreach ($value as $key => $item) {
+            if (is_string($item) && in_array($key, ['account_name', 'name'], true)) {
+                $value[$key] = preg_replace('/\s*\(demo\)\s*$/i', '', trim($item));
+            } else {
+                $value[$key] = sanitizeReportDisplayLabels($item);
+            }
+        }
+    }
+
+    return $value;
+}
+
 function outputReport($report, $format, $filename) {
+    $report = sanitizeReportDisplayLabels($report);
+
     switch ($format) {
         case 'csv':
             outputCSV($report, $filename);
