@@ -166,24 +166,35 @@ function getAdjustments($db) {
 function getAllocations($db) {
     $stmt = $db->prepare("
         SELECT
-            d.dept_name as department,
-            bi.department_id,
-            SUM(bi.budgeted_amount) as total_amount,
-            SUM(bi.actual_amount) as utilized_amount,
-            COALESCE(SUM(
-                CASE
-                    WHEN ba.status = 'pending' THEN ba.amount
-                    ELSE 0
-                END
-            ), 0) as reserved_amount
-        FROM budget_items bi
-        JOIN budgets b ON bi.budget_id = b.id
-        LEFT JOIN departments d ON bi.department_id = d.id
-        LEFT JOIN budget_adjustments ba ON ba.budget_id = b.id
-            AND ba.department_id = bi.department_id
-            AND ba.status = 'pending'
-        WHERE b.status IN ('draft', 'pending', 'approved', 'active')
-        GROUP BY bi.department_id, d.dept_name
+            COALESCE(d.dept_name, 'Unassigned') as department,
+            totals.department_id,
+            totals.total_amount,
+            totals.utilized_amount,
+            COALESCE(reserved.reserved_amount, 0) as reserved_amount
+        FROM (
+            SELECT
+                bi.department_id,
+                COALESCE(SUM(bi.budgeted_amount), 0) as total_amount,
+                COALESCE(SUM(bi.actual_amount), 0) as utilized_amount
+            FROM budget_items bi
+            JOIN budgets b ON bi.budget_id = b.id
+            WHERE b.status IN ('draft', 'pending', 'approved', 'active')
+            GROUP BY bi.department_id
+        ) totals
+        LEFT JOIN departments d ON totals.department_id = d.id
+        LEFT JOIN (
+            SELECT
+                ba.department_id,
+                COALESCE(SUM(ba.amount), 0) as reserved_amount
+            FROM budget_adjustments ba
+            JOIN budgets b ON ba.budget_id = b.id
+            WHERE ba.status = 'pending'
+              AND b.status IN ('draft', 'pending', 'approved', 'active')
+            GROUP BY ba.department_id
+        ) reserved ON (
+            reserved.department_id = totals.department_id
+            OR (reserved.department_id IS NULL AND totals.department_id IS NULL)
+        )
         ORDER BY d.dept_name
     ");
     $stmt->execute();
@@ -191,15 +202,18 @@ function getAllocations($db) {
 
     $allocations = [];
     foreach ($rawAllocations as $alloc) {
-        $remaining = $alloc['total_amount'] - $alloc['utilized_amount'];
+        $totalAmount = (float)$alloc['total_amount'];
+        $utilizedAmount = (float)$alloc['utilized_amount'];
+        $reservedAmount = (float)$alloc['reserved_amount'];
+        $remaining = $totalAmount - $utilizedAmount - $reservedAmount;
 
         $allocations[] = [
             'id' => count($allocations) + 1, // Simple ID for frontend
             'department' => $alloc['department'] ?: 'Unassigned',
             'department_id' => $alloc['department_id'],
-            'total_amount' => (float)$alloc['total_amount'],
-            'utilized_amount' => (float)$alloc['utilized_amount'],
-            'reserved_amount' => (float)$alloc['reserved_amount'],
+            'total_amount' => $totalAmount,
+            'utilized_amount' => $utilizedAmount,
+            'reserved_amount' => $reservedAmount,
             'remaining' => (float)$remaining
         ];
     }
@@ -531,26 +545,65 @@ function normalizeAllocationKey($value) {
     return $key;
 }
 
+function clampForecastMonths($value, $default = 36, $max = 120) {
+    $months = (int)$value;
+    if ($months < 1) {
+        return $default;
+    }
+    return min($months, $max);
+}
+
+function buildMonthlyHistory(array $rows, $months) {
+    $monthMap = [];
+    foreach ($rows as $row) {
+        if (empty($row['month'])) {
+            continue;
+        }
+
+        $monthKey = date('Y-m-01', strtotime($row['month']));
+        $monthMap[$monthKey] = (float)($row['amount'] ?? 0);
+    }
+
+    $endMonth = new DateTimeImmutable(date('Y-m-01'));
+    $startMonth = $endMonth->modify('-' . max($months - 1, 0) . ' months');
+    $history = [];
+
+    for ($cursor = $startMonth; $cursor->getTimestamp() <= $endMonth->getTimestamp(); $cursor = $cursor->modify('+1 month')) {
+        $monthKey = $cursor->format('Y-m-01');
+        $history[] = [
+            'date' => $monthKey,
+            'value' => (float)($monthMap[$monthKey] ?? 0)
+        ];
+    }
+
+    return $history;
+}
+
 function getForecastData($db) {
     // Return historical monthly totals for client-side forecasting (TF.js)
-    $months = isset($_GET['months']) ? (int)$_GET['months'] : 36;
+    $months = clampForecastMonths($_GET['months'] ?? 36);
+    $endMonth = new DateTimeImmutable(date('Y-m-01'));
+    $startDate = $endMonth->modify('-' . max($months - 1, 0) . ' months')->format('Y-m-01');
+    $endDate = date('Y-m-d');
 
     $query = "
         SELECT month, SUM(amount) as amount FROM (
             SELECT DATE_FORMAT(disbursement_date, '%Y-%m-01') as month, amount
             FROM disbursements
             WHERE disbursement_date IS NOT NULL
+              AND disbursement_date BETWEEN ? AND ?
             UNION ALL
             SELECT DATE_FORMAT(payment_date, '%Y-%m-01') as month, amount
             FROM payments_made
             WHERE payment_date IS NOT NULL
+              AND payment_date BETWEEN ? AND ?
         ) t
         GROUP BY month
         ORDER BY month ASC
     ";
 
     $stmt = $db->prepare($query);
-    $stmt->execute();
+    $stmt->execute([$startDate, $endDate, $startDate, $endDate]);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     if (empty($rows)) {
@@ -558,15 +611,7 @@ function getForecastData($db) {
         return;
     }
 
-    $history = [];
-    foreach ($rows as $r) {
-        $history[] = ['date' => $r['month'], 'value' => (float)$r['amount']];
-    }
-
-    // trim to last N months
-    if (count($history) > $months) {
-        $history = array_slice($history, -1 * $months);
-    }
+    $history = buildMonthlyHistory($rows, $months);
 
     // summary
     $total = 0;

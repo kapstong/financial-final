@@ -1256,9 +1256,10 @@ function getStatusBadge(status) {
 }
 
 function getVarianceStatusBadge(variancePercent) {
-    if (variancePercent < 0) return '<span class="badge bg-danger">Over</span>';
-    if (variancePercent > 10) return '<span class="badge bg-success">Under</span>';
-    return '<span class="badge bg-warning text-dark">On Track</span>';
+    if (variancePercent > 10) return '<span class="badge bg-danger">Over Budget</span>';
+    if (variancePercent > 5) return '<span class="badge bg-warning text-dark">Slightly Over</span>';
+    if (variancePercent < -10) return '<span class="badge bg-success">Under Budget</span>';
+    return '<span class="badge bg-info text-dark">On Target</span>';
 }
 </script>
 <script>
@@ -1277,9 +1278,10 @@ function getVarianceStatusBadge(variancePercent) {
         }
 
         function getVarianceStatusBadge(variancePercent) {
-            if (variancePercent < 0) return '<span class="badge bg-danger">Over</span>';
-            if (variancePercent > 10) return '<span class="badge bg-success">Under</span>';
-            return '<span class="badge bg-warning text-dark">On Track</span>';
+            if (variancePercent > 10) return '<span class="badge bg-danger">Over Budget</span>';
+            if (variancePercent > 5) return '<span class="badge bg-warning text-dark">Slightly Over</span>';
+            if (variancePercent < -10) return '<span class="badge bg-success">Under Budget</span>';
+            return '<span class="badge bg-info text-dark">On Target</span>';
         }
 
         function getAllocationStatusBadge(progressPercent) {
@@ -1464,9 +1466,11 @@ function getVarianceStatusBadge(variancePercent) {
         const utilizationRate = totalAllocated > 0 ? (totalUtilized / totalAllocated) * 100 : 0;
 
         const totalEl = document.getElementById('allocationSummaryTotal');
+        const utilizedEl = document.getElementById('allocationSummaryUtilized');
         const remainingEl = document.getElementById('allocationSummaryRemaining');
         const rateEl = document.getElementById('allocationSummaryRate');
         if (totalEl) totalEl.textContent = 'PHP ' + totalAllocated.toLocaleString();
+        if (utilizedEl) utilizedEl.textContent = 'PHP ' + totalUtilized.toLocaleString();
         if (remainingEl) remainingEl.textContent = 'PHP ' + totalRemaining.toLocaleString();
         if (rateEl) rateEl.textContent = utilizationRate.toFixed(1) + '%';
     }

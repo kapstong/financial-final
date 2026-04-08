@@ -1320,9 +1320,11 @@ $db = Database::getInstance()->getConnection();
             const utilizationRate = totalAllocated > 0 ? (totalUtilized / totalAllocated) * 100 : 0;
 
             const totalEl = document.getElementById('allocationSummaryTotal');
+            const utilizedEl = document.getElementById('allocationSummaryUtilized');
             const remainingEl = document.getElementById('allocationSummaryRemaining');
             const rateEl = document.getElementById('allocationSummaryRate');
             if (totalEl) totalEl.textContent = 'PHP ' + totalAllocated.toLocaleString();
+            if (utilizedEl) utilizedEl.textContent = 'PHP ' + totalUtilized.toLocaleString();
             if (remainingEl) remainingEl.textContent = 'PHP ' + totalRemaining.toLocaleString();
             if (rateEl) rateEl.textContent = utilizationRate.toFixed(1) + '%';
         }
@@ -1536,6 +1538,7 @@ $db = Database::getInstance()->getConnection();
 
             if (currentTrackingData.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No tracking data available.</td></tr>';
+                return;
             }
 
             currentTrackingData.forEach(item => {
@@ -1544,7 +1547,17 @@ $db = Database::getInstance()->getConnection();
                 const varianceClass = variance >= 0 ? 'variance-positive' : 'variance-negative';
                 const statusBadge = getVarianceStatusBadge(variancePercent);
 
-                
+                const row = `
+                    <tr>
+                        <td>${item.category}</td>
+                        <td>PHP ${parseFloat(item.budget_amount || 0).toLocaleString()}</td>
+                        <td>PHP ${parseFloat(item.actual_amount || 0).toLocaleString()}</td>
+                        <td class="${varianceClass}">PHP ${Math.abs(variance).toLocaleString()}</td>
+                        <td class="${varianceClass}">${variancePercent >= 0 ? '+' : ''}${variancePercent.toFixed(1)}%</td>
+                        <td>${statusBadge}</td>
+                    </tr>
+                `;
+                tbody.innerHTML += row;
             });
         }
 

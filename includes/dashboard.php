@@ -235,7 +235,7 @@ class DashboardManager {
     /**
      * Get default dashboard layout
      */
-    private function getDefaultLayout($userId) {
+    public function getDefaultLayout($userId) {
         // Get user role to determine appropriate widgets
         $userRole = $this->getUserRole($userId);
 
