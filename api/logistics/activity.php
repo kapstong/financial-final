@@ -37,7 +37,13 @@ function logisticsSend($payload, $status = 200) {
 }
 
 function logisticsTableExists(PDO $db, $tableName) {
-    $stmt = $db->prepare('SHOW TABLES LIKE ?');
+    $stmt = $db->prepare("
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = DATABASE()
+          AND table_name = ?
+        LIMIT 1
+    ");
     $stmt->execute([$tableName]);
     return (bool) $stmt->fetchColumn();
 }
