@@ -467,51 +467,97 @@ class HR3Integration extends BaseIntegration {
     protected $description = 'Process employee expense claims and reimbursements from HR3 system';
     protected $requiredConfig = ['api_url'];
 
+    private function buildRequestHeaders($config, array $headers) {
+        if (!empty($config['api_key'])) {
+            $headers[] = 'Authorization: Bearer ' . $config['api_key'];
+        }
+
+        return $headers;
+    }
+
+    private function fetchClaimsPayload($config, $params = []) {
+        $apiUrl = trim((string) ($config['api_url'] ?? ''));
+        if ($apiUrl === '') {
+            throw new Exception('HR3 API URL is not configured');
+        }
+
+        if (!empty($params)) {
+            $query = http_build_query($params);
+            if ($query !== '') {
+                $separator = strpos($apiUrl, '?') === false ? '?' : '&';
+                $apiUrl .= $separator . $query;
+            }
+        }
+
+        $ch = curl_init($apiUrl);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $this->buildRequestHeaders($config, [
+            'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept: application/json,text/plain,*/*'
+        ]));
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
+        curl_close($ch);
+
+        if ($curlError !== '') {
+            throw new Exception('Connection error: ' . $curlError);
+        }
+
+        if ($httpCode !== 200) {
+            throw new Exception('HR3 API returned HTTP ' . $httpCode);
+        }
+
+        $data = json_decode($response, true);
+        if ($data === null && json_last_error() !== JSON_ERROR_NONE) {
+            throw new Exception('Invalid HR3 API response');
+        }
+
+        $claims = isset($data['claims']) ? $data['claims'] : (is_array($data) ? $data : []);
+        if (!is_array($claims)) {
+            throw new Exception('Invalid HR3 API response: claims is not an array');
+        }
+
+        return array_values($claims);
+    }
+
+    private function normalizeClaimStatus($status) {
+        $normalized = strtolower(trim((string) $status));
+
+        if (in_array($normalized, ['approved', 'paid', 'processed', 'completed'], true)) {
+            return 'approved';
+        }
+
+        if (in_array($normalized, ['submitted', 'pending', 'initiated', 'for approval', 'for_approval'], true)) {
+            return 'pending';
+        }
+
+        if (in_array($normalized, ['rejected', 'cancelled', 'canceled', 'declined'], true)) {
+            return 'rejected';
+        }
+
+        return $normalized === '' ? 'pending' : $normalized;
+    }
+
+    private function resolveClaimDepartment($claim, $params = []) {
+        $department = trim((string) (
+            $claim['department']
+            ?? $claim['department_name']
+            ?? $claim['department_code']
+            ?? $params['department_code']
+            ?? 'General'
+        ));
+
+        return $department === '' ? 'General' : $department;
+    }
+
     public function testConnection($config) {
         try {
-            $ch = curl_init($config['api_url']);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-
-            // Add browser-like headers to avoid blocking
-            $headers = [
-                'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language: en-US,en;q=0.5',
-                'Accept-Encoding: gzip, deflate',
-                'DNT: 1',
-                'Connection: keep-alive',
-                'Upgrade-Insecure-Requests: 1'
-            ];
-            curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-
-            $response = curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-
-            if ($httpCode !== 200) {
-                return ['success' => false, 'message' => 'HR3 API returned HTTP ' . $httpCode];
-            }
-
-            $data = json_decode($response, true);
-            if ($data === null && json_last_error() !== JSON_ERROR_NONE) {
-                return ['success' => false, 'message' => 'Invalid HR3 API response format'];
-            }
-
-            $claims = [];
-            if (is_array($data) && array_key_exists('claims', $data)) {
-                $claims = $data['claims'];
-            } elseif (is_array($data)) {
-                $claims = $data;
-            }
-
-            if (!is_array($claims)) {
-                return ['success' => false, 'message' => 'Invalid HR3 API response format'];
-            }
-
-            $claimCount = count($claims);
+            $claimCount = count($this->fetchClaimsPayload($config));
             return [
                 'success' => true,
                 'message' => "HR3 connection successful. Found {$claimCount} employee claims"
@@ -526,45 +572,7 @@ class HR3Integration extends BaseIntegration {
      */
     public function getApprovedClaims($config, $params = []) {
         try {
-            $apiUrl = $config['api_url'];
-            if (!empty($params)) {
-                $query = http_build_query($params);
-                if ($query !== '') {
-                    $separator = strpos($apiUrl, '?') === false ? '?' : '&';
-                    $apiUrl .= $separator . $query;
-                }
-            }
-
-            $ch = curl_init($apiUrl);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept: application/json,text/plain,*/*'
-            ]);
-
-            $response = curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-
-            if ($httpCode !== 200) {
-                throw new Exception('HR3 API returned HTTP ' . $httpCode);
-            }
-
-            $data = json_decode($response, true);
-            if (!$data) {
-                throw new Exception('Invalid HR3 API response');
-            }
-
-            $claims = isset($data['claims']) ? $data['claims'] : (is_array($data) ? $data : []);
-            if (!is_array($claims)) {
-                throw new Exception('Invalid HR3 API response: claims is not an array');
-            }
-
-            // Return all claims (don't filter by status - let UI decide which to process)
-            // Filter only approved claims if status is present
+            $claims = $this->fetchClaimsPayload($config, $params);
             $approvedClaims = array_filter($claims, function($claim) {
                 // If no status field, include the claim
                 if (!isset($claim['status'])) {
@@ -791,12 +799,12 @@ class HR3Integration extends BaseIntegration {
      */
     public function getClaimsBreakdown($config, $params = []) {
         try {
-            $claims = $this->getApprovedClaims($config, $params);
+            $claims = $this->fetchClaimsPayload($config, $params);
 
             // Create breakdown by department and status
             $breakdown = [
                 'summary' => [
-                    'total_claims' => count($claims),
+                    'total_claims' => 0,
                     'total_amount' => 0,
                     'department_breakdown' => [],
                     'status_breakdown' => [
@@ -810,9 +818,23 @@ class HR3Integration extends BaseIntegration {
 
             foreach ($claims as $claim) {
                 $amount = floatval($claim['amount'] ?? $claim['total_amount'] ?? 0);
-                $department = $claim['department'] ?? 'General';
-                $status = strtolower($claim['status'] ?? 'approved');
+                $status = $this->normalizeClaimStatus($claim['status'] ?? 'pending');
 
+                if ($amount <= 0) {
+                    continue;
+                }
+
+                if (isset($breakdown['summary']['status_breakdown'][$status])) {
+                    $breakdown['summary']['status_breakdown'][$status]++;
+                }
+
+                if ($status === 'rejected') {
+                    continue;
+                }
+
+                $department = $this->resolveClaimDepartment($claim, $params);
+
+                $breakdown['summary']['total_claims']++;
                 $breakdown['summary']['total_amount'] += $amount;
 
                 // Department breakdown
@@ -825,11 +847,6 @@ class HR3Integration extends BaseIntegration {
                 $breakdown['summary']['department_breakdown'][$department]['claim_count']++;
                 $breakdown['summary']['department_breakdown'][$department]['total_amount'] += $amount;
 
-                // Status breakdown
-                if (isset($breakdown['summary']['status_breakdown'][$status])) {
-                    $breakdown['summary']['status_breakdown'][$status]++;
-                }
-
                 // Add to claims list
                 $breakdown['claims'][] = [
                     'id' => $claim['claim_id'] ?? $claim['id'],
@@ -837,7 +854,7 @@ class HR3Integration extends BaseIntegration {
                     'department' => $department,
                     'amount' => $amount,
                     'description' => $claim['description'] ?? $claim['purpose'] ?? '',
-                    'date_submitted' => $claim['date_submitted'] ?? '',
+                    'date_submitted' => $claim['date_submitted'] ?? $claim['created_at'] ?? '',
                     'status' => $status
                 ];
             }

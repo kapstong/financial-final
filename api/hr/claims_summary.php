@@ -3,7 +3,8 @@ require_once __DIR__ . '/../_bootstrap.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
 $configFile = __DIR__ . '/../../config/integrations/hr3.json';
-$config = ['api_url' => 'https://hr3.atierahotelandrestaurant.com/claims/claimsSummary.php'];
+$defaultClaimsSummaryUrl = 'https://hr3.atierahotelandrestaurant.com/claims/claimsSummary.php';
+$config = ['claims_summary_url' => $defaultClaimsSummaryUrl];
 
 if (file_exists($configFile)) {
     $configData = json_decode(file_get_contents($configFile), true);
@@ -12,7 +13,35 @@ if (file_exists($configFile)) {
     }
 }
 
-$apiUrl = $config['claims_summary_url'] ?? $config['api_url'] ?? 'https://hr3.atierahotelandrestaurant.com/claims/claimsSummary.php';
+function resolveHr3ClaimsSummaryUrl(array $config, $defaultUrl) {
+    $configuredSummaryUrl = trim((string) ($config['claims_summary_url'] ?? ''));
+    if ($configuredSummaryUrl !== '') {
+        return $configuredSummaryUrl;
+    }
+
+    $configuredApiUrl = trim((string) ($config['api_url'] ?? ''));
+    if ($configuredApiUrl === '') {
+        return $defaultUrl;
+    }
+
+    if (stripos($configuredApiUrl, 'claimsSummary.php') !== false) {
+        return $configuredApiUrl;
+    }
+
+    $derivedUrl = preg_replace(
+        '#/api/claimsapi\.php(?:\?.*)?$#i',
+        '/claims/claimsSummary.php',
+        str_replace('\\', '/', $configuredApiUrl)
+    );
+
+    if (is_string($derivedUrl) && stripos($derivedUrl, 'claimsSummary.php') !== false) {
+        return $derivedUrl;
+    }
+
+    return $defaultUrl;
+}
+
+$apiUrl = resolveHr3ClaimsSummaryUrl($config, $defaultClaimsSummaryUrl);
 
 $queryParams = $_GET;
 unset($queryParams['api_key']);

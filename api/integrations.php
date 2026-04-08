@@ -6,28 +6,32 @@
 
 // Set error handling
 set_error_handler(function($errno, $errstr, $errfile, $errline) {
-    http_response_code(500);
-    echo json_encode([
-        'success' => false,
-        'error' => 'Server error: ' . $errstr,
-        'debug' => ['file' => $errfile, 'line' => $errline]
-    ]);
-    exit;
+    if (!(error_reporting() & $errno)) {
+        return false;
+    }
+
+    throw new ErrorException($errstr, 0, $errno, $errfile, $errline);
 });
 
 register_shutdown_function(function() {
     $error = error_get_last();
-    if ($error !== null) {
-        http_response_code(500);
+    $fatalErrorTypes = [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR];
+
+    if ($error !== null && in_array($error['type'] ?? null, $fatalErrorTypes, true)) {
+        if (!headers_sent()) {
+            header('Content-Type: application/json; charset=UTF-8');
+            http_response_code(500);
+        }
+
         echo json_encode([
             'success' => false,
             'error' => 'Fatal error: ' . $error['message'],
             'debug' => ['file' => $error['file'], 'line' => $error['line']]
-        ]);
+        ], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
     }
 });
 
-header('Content-Type: application/json');
+header('Content-Type: application/json; charset=UTF-8');
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
@@ -49,6 +53,22 @@ if (!($roleName === 'staff' && in_array($action, ['execute', 'test'], true))) {
         'DELETE' => 'integrations.manage',
         'PATCH' => 'integrations.manage',
     ]);
+}
+
+function sendIntegrationResponse($payload, $status = 200) {
+    http_response_code($status);
+    $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+
+    if ($json === false) {
+        http_response_code(500);
+        $json = json_encode([
+            'success' => false,
+            'error' => 'Failed to encode integration response'
+        ], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+    }
+
+    echo $json;
+    exit;
 }
 
 function buildIntegrationParams(array $source) {
@@ -76,20 +96,16 @@ try {
                     $actionName = $_GET['action_name'] ?? '';
 
                     if ($integrationName === '' || $actionName === '') {
-                        http_response_code(400);
-                        echo json_encode(['success' => false, 'error' => 'Missing integration_name or action_name']);
-                        exit;
+                        sendIntegrationResponse(['success' => false, 'error' => 'Missing integration_name or action_name'], 400);
                     }
 
                     $manager = APIIntegrationManager::getInstance();
                     $params = buildIntegrationParams($_GET);
                     $result = $manager->executeIntegrationAction($integrationName, $actionName, $params);
-                    echo json_encode(['success' => true, 'result' => $result]);
+                    sendIntegrationResponse(['success' => true, 'result' => $result]);
                     break;
                 default:
-                    http_response_code(400);
-                    echo json_encode(['error' => 'Invalid action']);
-                    exit;
+                    sendIntegrationResponse(['error' => 'Invalid action'], 400);
             }
             break;
 
@@ -100,53 +116,48 @@ try {
                 case 'test':
                     $integrationName = $_POST['integration_name'] ?? '';
                     if ($integrationName === '') {
-                        http_response_code(400);
-                        echo json_encode(['success' => false, 'error' => 'Missing integration_name']);
-                        exit;
+                        sendIntegrationResponse(['success' => false, 'error' => 'Missing integration_name'], 400);
                     }
 
                     $manager = APIIntegrationManager::getInstance();
                     $result = $manager->testIntegration($integrationName);
-                    echo json_encode($result);
+                    sendIntegrationResponse($result);
                     break;
                 case 'execute':
                     $integrationName = $_POST['integration_name'] ?? ($_GET['integration_name'] ?? '');
                     $actionName = $_POST['action_name'] ?? ($_GET['action_name'] ?? '');
 
                     if ($integrationName === '' || $actionName === '') {
-                        http_response_code(400);
-                        echo json_encode(['success' => false, 'error' => 'Missing integration_name or action_name']);
-                        exit;
+                        sendIntegrationResponse(['success' => false, 'error' => 'Missing integration_name or action_name'], 400);
                     }
 
                     $manager = APIIntegrationManager::getInstance();
                     $params = buildIntegrationParams($_POST);
                     $result = $manager->executeIntegrationAction($integrationName, $actionName, $params);
-                    echo json_encode(['success' => true, 'result' => $result]);
+                    sendIntegrationResponse(['success' => true, 'result' => $result]);
                     break;
 
                 default:
-                    http_response_code(400);
-                    echo json_encode(['error' => 'Invalid action']);
-                    exit;
+                    sendIntegrationResponse(['error' => 'Invalid action'], 400);
             }
             break;
 
         case 'PUT':
         case 'DELETE':
-            http_response_code(400);
-            echo json_encode(['error' => 'Invalid action']);
+            sendIntegrationResponse(['error' => 'Invalid action'], 400);
             break;
 
         default:
-            http_response_code(405);
-            echo json_encode(['error' => 'Method not allowed']);
+            sendIntegrationResponse(['error' => 'Method not allowed'], 405);
             break;
     }
-} catch (Exception $e) {
+} catch (Throwable $e) {
     Logger::getInstance()->logDatabaseError('Integration API operation', $e->getMessage());
-    http_response_code(500);
-    echo json_encode(['success' => false, 'error' => 'Internal server error']);
+    $status = 500;
+    if (stripos($e->getMessage(), 'HTTP ') !== false || stripos($e->getMessage(), 'Connection error') !== false) {
+        $status = 502;
+    }
+    sendIntegrationResponse(['success' => false, 'error' => $e->getMessage()], $status);
 }
 
 /**

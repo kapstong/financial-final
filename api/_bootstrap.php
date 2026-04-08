@@ -1,5 +1,5 @@
 <?php
-header('Content-Type: application/json');
+header('Content-Type: application/json; charset=UTF-8');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, X-API-Key');
@@ -17,12 +17,22 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-$apiClient = APIAuth::getInstance()->authenticate();
+$sessionUser = $_SESSION['user'] ?? null;
+if (is_array($sessionUser) && !empty($sessionUser['id'])) {
+    $apiClient = [
+        'id' => $sessionUser['id'],
+        'name' => $sessionUser['username'] ?? ($sessionUser['name'] ?? 'session_user'),
+        'auth_type' => 'session'
+    ];
+} else {
+    $apiClient = APIAuth::getInstance()->authenticate();
+}
+
 $db = Database::getInstance()->getConnection();
 
 function api_send($payload, $status = 200) {
     http_response_code($status);
-    echo json_encode($payload);
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
     exit;
 }
 
