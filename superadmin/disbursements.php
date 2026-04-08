@@ -441,6 +441,11 @@ body {
                 </button>
             </li>
             <li class="nav-item" role="presentation">
+                <button class="nav-link" id="logistics-tab" data-bs-toggle="tab" data-bs-target="#logistics" type="button" role="tab">
+                    <i class="fas fa-truck-loading me-2"></i>Logistics Sync
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
                 <button class="nav-link" id="vouchers-tab" data-bs-toggle="tab" data-bs-target="#vouchers" type="button" role="tab">
                     <i class="fas fa-file-invoice me-2"></i>Vouchers & Documentation
                 </button>
@@ -643,6 +648,97 @@ body {
                             <tr>
                                 <td colspan="7" class="text-center">
                                     <div class="text-muted">Click "Load Incentives" to fetch incentives from HR4 system</div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Logistics Sync Tab -->
+            <div class="tab-pane fade" id="logistics" role="tabpanel" aria-labelledby="logistics-tab">
+                <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                    <div>
+                        <h6 class="mb-0">Procurement and Transportation Integrations</h6>
+                        <small class="text-muted">Sync Logistics 1 supplier invoices and purchase orders, plus Logistics 2 trip costs, into the local finance workflow.</small>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2">
+                        <button class="btn btn-outline-secondary" onclick="loadLogisticsActivity(this)">
+                            <i class="fas fa-rotate me-2"></i>Refresh Activity
+                        </button>
+                        <button class="btn btn-primary" onclick="runLogisticsImport('logistics1', 'importInvoices', this)">
+                            <i class="fas fa-file-invoice-dollar me-2"></i>Import Supplier Invoices
+                        </button>
+                        <button class="btn btn-outline-primary" onclick="runLogisticsImport('logistics1', 'importPurchaseOrders', this)">
+                            <i class="fas fa-cart-shopping me-2"></i>Import Purchase Orders
+                        </button>
+                        <button class="btn btn-success" onclick="runLogisticsImport('logistics2', 'importTripCosts', this)">
+                            <i class="fas fa-truck me-2"></i>Import Trip Costs
+                        </button>
+                    </div>
+                </div>
+
+                <div class="row g-3 mb-3">
+                    <div class="col-lg-3 col-md-6">
+                        <div class="card h-100 text-center">
+                            <div class="card-body">
+                                <i class="fas fa-file-invoice-dollar fa-2x text-primary mb-2"></i>
+                                <h6 class="text-muted">Supplier Invoices</h6>
+                                <h3 id="logisticsInvoiceCount">0</h3>
+                                <small class="text-muted" id="logisticsInvoiceAmount">PHP 0.00</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-3 col-md-6">
+                        <div class="card h-100 text-center">
+                            <div class="card-body">
+                                <i class="fas fa-cart-shopping fa-2x text-info mb-2"></i>
+                                <h6 class="text-muted">Purchase Orders</h6>
+                                <h3 id="logisticsPurchaseOrderCount">0</h3>
+                                <small class="text-muted" id="logisticsPurchaseOrderAmount">PHP 0.00</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-3 col-md-6">
+                        <div class="card h-100 text-center">
+                            <div class="card-body">
+                                <i class="fas fa-truck fa-2x text-success mb-2"></i>
+                                <h6 class="text-muted">Trip Costs</h6>
+                                <h3 id="logisticsTripCount">0</h3>
+                                <small class="text-muted" id="logisticsTripAmount">PHP 0.00</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-3 col-md-6">
+                        <div class="card h-100 text-center">
+                            <div class="card-body">
+                                <i class="fas fa-boxes-stacked fa-2x text-warning mb-2"></i>
+                                <h6 class="text-muted">Total Imported</h6>
+                                <h3 id="logisticsTotalAmount">PHP 0.00</h3>
+                                <small class="text-muted" id="logisticsLastImported">No local imports yet</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-striped" id="logisticsTable">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>System</th>
+                                <th>Type</th>
+                                <th>Reference</th>
+                                <th>Department</th>
+                                <th>Description</th>
+                                <th>Amount</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logisticsTableBody">
+                            <tr>
+                                <td colspan="8" class="text-center">
+                                    <div class="text-muted">Click "Refresh Activity" to load recent logistics imports</div>
                                 </td>
                             </tr>
                         </tbody>
@@ -2029,6 +2125,169 @@ body {
 
         window.viewIncentiveDetails = function(buttonEl, incentiveId) {
             window.showAlert('Incentive ID: ' + incentiveId + ' is already processed and approved.', 'info');
+        };
+    });
+    </script>
+
+    <script>
+    window.addEventListener('DOMContentLoaded', function() {
+        const logisticsLabels = {
+            LOGISTICS1: 'Logistics 1',
+            LOGISTICS2: 'Logistics 2'
+        };
+        const transactionLabels = {
+            supplier_invoice: 'Supplier Invoice',
+            purchase_order: 'Purchase Order',
+            transportation_expense: 'Trip Cost'
+        };
+
+        function formatMoney(value) {
+            return 'PHP ' + Number(value || 0).toLocaleString('en-US', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+        }
+
+        function setText(id, value) {
+            const element = document.getElementById(id);
+            if (element) {
+                element.textContent = value;
+            }
+        }
+
+        function getLogisticsStatusBadge(status) {
+            const key = String(status || 'pending').toLowerCase();
+            const badgeMap = {
+                pending: 'bg-warning text-dark',
+                processed: 'bg-success',
+                imported: 'bg-success',
+                approved: 'bg-info',
+                failed: 'bg-danger',
+                error: 'bg-danger'
+            };
+            const badgeClass = badgeMap[key] || 'bg-secondary';
+            const label = String(status || 'Pending').replace(/[_-]/g, ' ').replace(/\b\w/g, function(char) {
+                return char.toUpperCase();
+            });
+            return '<span class="badge ' + badgeClass + '">' + escapeHtml(label) + '</span>';
+        }
+
+        function renderLogisticsSummary(summary) {
+            setText('logisticsInvoiceCount', String(summary.invoice_count || 0));
+            setText('logisticsInvoiceAmount', formatMoney(summary.invoice_amount));
+            setText('logisticsPurchaseOrderCount', String(summary.purchase_order_count || 0));
+            setText('logisticsPurchaseOrderAmount', formatMoney(summary.purchase_order_amount));
+            setText('logisticsTripCount', String(summary.trip_count || 0));
+            setText('logisticsTripAmount', formatMoney(summary.trip_amount));
+            setText('logisticsTotalAmount', formatMoney(summary.total_amount));
+
+            const lastImported = summary.last_imported_at
+                ? 'Last import: ' + formatDate(summary.last_imported_at)
+                : 'No local imports yet';
+            setText('logisticsLastImported', lastImported);
+        }
+
+        function renderLogisticsRows(rows) {
+            const tbody = document.getElementById('logisticsTableBody');
+            if (!tbody) {
+                return;
+            }
+
+            if (!Array.isArray(rows) || rows.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No logistics activity found.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = rows.map(function(item) {
+                const sourceLabel = logisticsLabels[item.source_system] || item.source_system || 'Unknown';
+                const typeLabel = transactionLabels[item.transaction_type] || item.transaction_type || 'Import';
+                return '<tr>' +
+                    '<td>' + escapeHtml(formatDate(item.transaction_date)) + '</td>' +
+                    '<td>' + escapeHtml(sourceLabel) + '</td>' +
+                    '<td>' + escapeHtml(typeLabel) + '</td>' +
+                    '<td>' + escapeHtml(item.external_reference || 'N/A') + '</td>' +
+                    '<td>' + escapeHtml(item.department_name || 'Unassigned') + '</td>' +
+                    '<td>' + escapeHtml(item.description || 'No description') + '</td>' +
+                    '<td><strong>' + escapeHtml(formatMoney(item.amount)) + '</strong></td>' +
+                    '<td>' + getLogisticsStatusBadge(item.status) + '</td>' +
+                '</tr>';
+            }).join('');
+        }
+
+        window.loadLogisticsActivity = async function(buttonEl) {
+            window.showTableLoading('logisticsTableBody', 'Loading logistics activity...');
+
+            const button = buttonEl && buttonEl.closest ? buttonEl.closest('button') : null;
+            const originalText = button ? button.innerHTML : '';
+            if (button) {
+                button.disabled = true;
+                button.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Loading...';
+            }
+
+            try {
+                const response = await fetch('../api/logistics/activity.php?limit=25', {
+                    credentials: 'include'
+                });
+                const result = await response.json();
+
+                if (!response.ok || !result.success) {
+                    throw new Error(result.error || 'Unable to load logistics activity');
+                }
+
+                renderLogisticsSummary(result.summary || {});
+                renderLogisticsRows(result.transactions || []);
+            } catch (error) {
+                window.showTableError('logisticsTableBody', 'Unable to load logistics activity.');
+                window.showAlert('Error loading logistics activity: ' + error.message, 'danger');
+            } finally {
+                if (button) {
+                    button.disabled = false;
+                    button.innerHTML = originalText;
+                }
+            }
+        };
+
+        window.runLogisticsImport = async function(integrationName, actionName, buttonEl) {
+            const button = buttonEl && buttonEl.closest ? buttonEl.closest('button') : null;
+            const originalText = button ? button.innerHTML : '';
+
+            if (button) {
+                button.disabled = true;
+                button.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Syncing...';
+            }
+
+            try {
+                const response = await fetch('../api/integrations.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    credentials: 'include',
+                    body: new URLSearchParams({
+                        action: 'execute',
+                        integration_name: integrationName,
+                        action_name: actionName,
+                        params: JSON.stringify({ requested_at: Date.now() })
+                    })
+                });
+
+                const result = await response.json();
+                const payload = result.result || {};
+
+                if (!response.ok || !result.success || payload.success === false) {
+                    throw new Error(result.error || payload.error || 'Sync failed');
+                }
+
+                window.showAlert(payload.message || 'Logistics sync completed successfully.', 'success');
+                await window.loadLogisticsActivity();
+            } catch (error) {
+                window.showAlert('Error syncing logistics data: ' + error.message, 'danger');
+            } finally {
+                if (button) {
+                    button.disabled = false;
+                    button.innerHTML = originalText;
+                }
+            }
         };
     });
     </script>

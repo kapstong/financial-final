@@ -600,6 +600,7 @@ header('Content-Type: application/javascript');
                 'records-tab': 'view',           // Disbursement Records - basic view permission
                 'processing-tab': 'create',      // Payment Processing - requires create permission
                 'claims-tab': 'process_claims',  // Claims Processing - requires process_claims permission
+                'logistics-tab': 'view',         // Logistics Sync - shared expense import workspace
                 'vouchers-tab': 'upload_vouchers', // Vouchers - requires upload permission
                 'reports-tab': 'view',           // Reports - basic view permission
                 'audit-tab': 'delete'            // Audit Trail - requires delete permission
@@ -668,6 +669,11 @@ header('Content-Type: application/javascript');
                 switch(target) {
                     case '#audit':
                         loadAuditTrail();
+                        break;
+                    case '#logistics':
+                        if (typeof loadLogisticsActivity === 'function') {
+                            loadLogisticsActivity();
+                        }
                         break;
                     case '#reports':
                         loadDisbursementReports();
