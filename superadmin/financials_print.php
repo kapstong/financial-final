@@ -52,7 +52,7 @@ switch ($financialPeriod) {
 $financialDateFrom = $financialDateFromObj->format('Y-m-d');
 
 // Fetch chart of accounts as of date
-$chartOfAccountsFinancialStmt = $db->prepare("\n    SELECT\n        coa.id, coa.account_code, coa.account_name, coa.account_type, coa.description, coa.category,\n        COALESCE(SUM(\n            CASE\n                WHEN coa.account_type IN ('asset','expense')\n                    THEN COALESCE(jel.debit, 0) - COALESCE(jel.credit, 0)\n                ELSE COALESCE(jel.credit, 0) - COALESCE(jel.debit, 0)\n            END\n        ), 0) as balance\n    FROM chart_of_accounts coa\n    LEFT JOIN journal_entry_lines jel ON coa.id = jel.account_id\n    LEFT JOIN journal_entries je ON jel.journal_entry_id = je.id\n        AND (je.status = 'posted' OR je.status IS NULL OR je.status = '')\n        AND je.entry_date <= ?\n    WHERE coa.is_active = 1\n    GROUP BY coa.id, coa.account_code, coa.account_name, coa.account_type, coa.description, coa.category\n    ORDER BY coa.account_code ASC\n");
+$chartOfAccountsFinancialStmt = $db->prepare("\n    SELECT\n        coa.id, coa.account_code, coa.account_name, coa.account_type, coa.description, coa.category,\n        COALESCE(SUM(\n            CASE\n                WHEN je.id IS NULL THEN 0\n                WHEN coa.account_type IN ('asset','expense')\n                    THEN COALESCE(jel.debit, 0) - COALESCE(jel.credit, 0)\n                ELSE COALESCE(jel.credit, 0) - COALESCE(jel.debit, 0)\n            END\n        ), 0) as balance\n    FROM chart_of_accounts coa\n    LEFT JOIN journal_entry_lines jel ON coa.id = jel.account_id\n    LEFT JOIN journal_entries je ON jel.journal_entry_id = je.id\n        AND (je.status = 'posted' OR je.status IS NULL OR je.status = '')\n        AND je.entry_date <= ?\n    WHERE coa.is_active = 1\n    GROUP BY coa.id, coa.account_code, coa.account_name, coa.account_type, coa.description, coa.category\n    ORDER BY coa.account_code ASC\n");
 $chartOfAccountsFinancialStmt->execute([$financialDateTo]);
 $chartOfAccountsFinancial = $chartOfAccountsFinancialStmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -70,6 +70,11 @@ foreach ($chartOfAccountsFinancial as $row) {
     }
 }
 $finNetProfit = $finTotalRevenue - $finTotalExpenses;
+$displayFinTotalAssets = abs($finTotalAssets);
+$displayFinTotalLiabilities = abs($finTotalLiabilities);
+$displayFinTotalEquity = abs($finTotalEquity);
+$displayFinNetProfit = abs($finNetProfit);
+$finNetProfitLabel = $finNetProfit < 0 ? 'Net Loss' : 'Net Profit';
 
 // Cash-flow classification (reuse heuristics as in general_ledger)
 $cashAccountCodesManual = [];
@@ -190,10 +195,10 @@ $printedAt = date('M d, Y h:i A');
     <h3>Balance Sheet</h3>
     <table>
         <tr><th>Assets</th><th class="text-right">Amount</th></tr>
-        <tr><td>Total Assets</td><td class="text-right">&#8369;<?php echo number_format($finTotalAssets,2); ?></td></tr>
+        <tr><td>Total Assets</td><td class="text-right">&#8369;<?php echo number_format($displayFinTotalAssets,2); ?></td></tr>
         <tr><th>Liabilities & Equity</th><th class="text-right"></th></tr>
-        <tr><td>Total Liabilities</td><td class="text-right">&#8369;<?php echo number_format($finTotalLiabilities,2); ?></td></tr>
-        <tr><td>Total Equity</td><td class="text-right">&#8369;<?php echo number_format($finTotalEquity,2); ?></td></tr>
+        <tr><td>Total Liabilities</td><td class="text-right">&#8369;<?php echo number_format($displayFinTotalLiabilities,2); ?></td></tr>
+        <tr><td>Total Equity</td><td class="text-right">&#8369;<?php echo number_format($displayFinTotalEquity,2); ?></td></tr>
     </table>
 
     <h3>Income Statement</h3>
@@ -201,7 +206,7 @@ $printedAt = date('M d, Y h:i A');
         <tr><th>Revenue / Expense</th><th class="text-right">Amount</th></tr>
         <tr><td>Total Revenue</td><td class="text-right">&#8369;<?php echo number_format($finTotalRevenue,2); ?></td></tr>
         <tr><td>Total Expenses</td><td class="text-right">&#8369;<?php echo number_format($finTotalExpenses,2); ?></td></tr>
-        <tr style="font-weight:600;"><td>Net Profit</td><td class="text-right">&#8369;<?php echo number_format($finNetProfit,2); ?></td></tr>
+        <tr style="font-weight:600;"><td><?php echo htmlspecialchars($finNetProfitLabel); ?></td><td class="text-right">&#8369;<?php echo number_format($displayFinNetProfit,2); ?></td></tr>
     </table>
 
     <h3>Cash Flow (Classified)</h3>

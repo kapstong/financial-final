@@ -109,6 +109,7 @@ try {
             coa.account_type,
             SUM(
                 CASE
+                    WHEN je.id IS NULL THEN 0
                     WHEN coa.account_type IN ('asset','expense')
                         THEN COALESCE(jel.debit, 0) - COALESCE(jel.credit, 0)
                     ELSE COALESCE(jel.credit, 0) - COALESCE(jel.debit, 0)
@@ -154,9 +155,12 @@ try {
     }
 
     $netProfit = $totalRevenue - $totalExpenses;
+    $displayTotalAssets = abs($totalAssets);
+    $displayNetProfit = abs($netProfit);
+    $netProfitLabel = $netProfit < 0 ? 'Net Loss' : 'Net Profit';
 
     // Calculate balances for Financial Statements (use selected financial date)
-    $finBalanceStmt = $db->prepare("\n        SELECT\n            coa.account_type,\n            SUM(\n                CASE\n                    WHEN coa.account_type IN ('asset','expense')\n                        THEN COALESCE(jel.debit, 0) - COALESCE(jel.credit, 0)\n                    ELSE COALESCE(jel.credit, 0) - COALESCE(jel.debit, 0)\n                END\n            ) as balance\n        FROM chart_of_accounts coa\n        LEFT JOIN journal_entry_lines jel ON coa.id = jel.account_id\n        LEFT JOIN journal_entries je ON jel.journal_entry_id = je.id\n            AND (je.status = 'posted' OR je.status IS NULL OR je.status = '')\n            AND je.entry_date <= ?\n        WHERE coa.is_active = 1\n        GROUP BY coa.id, coa.account_type\n    ");
+    $finBalanceStmt = $db->prepare("\n        SELECT\n            coa.account_type,\n            SUM(\n                CASE\n                    WHEN je.id IS NULL THEN 0\n                    WHEN coa.account_type IN ('asset','expense')\n                        THEN COALESCE(jel.debit, 0) - COALESCE(jel.credit, 0)\n                    ELSE COALESCE(jel.credit, 0) - COALESCE(jel.debit, 0)\n                END\n            ) as balance\n        FROM chart_of_accounts coa\n        LEFT JOIN journal_entry_lines jel ON coa.id = jel.account_id\n        LEFT JOIN journal_entries je ON jel.journal_entry_id = je.id\n            AND (je.status = 'posted' OR je.status IS NULL OR je.status = '')\n            AND je.entry_date <= ?\n        WHERE coa.is_active = 1\n        GROUP BY coa.id, coa.account_type\n    ");
     $finBalanceStmt->execute([$financialDateTo]);
     $finBalanceQuery = $finBalanceStmt->fetchAll();
 
@@ -188,6 +192,12 @@ try {
     }
 
     $finNetProfit = $finTotalRevenue - $finTotalExpenses;
+    $displayFinTotalAssets = abs($finTotalAssets);
+    $displayFinTotalLiabilities = abs($finTotalLiabilities);
+    $displayFinTotalEquity = abs($finTotalEquity + $finNetProfit);
+    $displayFinNetProfit = abs($finNetProfit);
+    $finNetProfitLabel = $finNetProfit < 0 ? 'Net Loss' : 'Net Profit';
+    $retainedEarningsLabel = $finNetProfit < 0 ? 'Accumulated Loss' : 'Retained Earnings';
 
     // Fetch actual Chart of Accounts with calculated balances
     // Fetch actual Chart of Accounts with calculated balances (page display - no date filter)
@@ -201,6 +211,7 @@ try {
             coa.category,
             COALESCE(SUM(
                 CASE
+                    WHEN je.id IS NULL THEN 0
                     WHEN coa.account_type IN ('asset','expense')
                         THEN COALESCE(jel.debit, 0) - COALESCE(jel.credit, 0)
                     ELSE COALESCE(jel.credit, 0) - COALESCE(jel.debit, 0)
@@ -225,6 +236,7 @@ try {
             coa.category,
             COALESCE(SUM(
                 CASE
+                    WHEN je.id IS NULL THEN 0
                     WHEN coa.account_type IN ('asset','expense')
                         THEN COALESCE(jel.debit, 0) - COALESCE(jel.credit, 0)
                     ELSE COALESCE(jel.credit, 0) - COALESCE(jel.debit, 0)
@@ -1385,14 +1397,14 @@ try {
             </div>
             <div class="col-md-3">
                 <div class="stats-card">
-                    <h3><?php echo format_currency($totalAssets); ?></h3>
+                    <h3><?php echo format_currency($displayTotalAssets); ?></h3>
                     <p>Total Assets <i class="fas fa-info-circle text-muted ms-1" data-bs-toggle="tooltip" title="As of the selected Trial Balance date"></i></p>
                 </div>
             </div>
             <div class="col-md-3">
                 <div class="stats-card">
-                    <h3><?php echo format_currency($netProfit); ?></h3>
-                    <p>Net Profit <i class="fas fa-info-circle text-muted ms-1" data-bs-toggle="tooltip" title="As of the selected Trial Balance date"></i></p>
+                    <h3><?php echo format_currency($displayNetProfit); ?></h3>
+                    <p><?php echo htmlspecialchars($netProfitLabel); ?> <i class="fas fa-info-circle text-muted ms-1" data-bs-toggle="tooltip" title="As of the selected Trial Balance date"></i></p>
                 </div>
             </div>
         </div>
@@ -1907,13 +1919,13 @@ try {
                                                         <tr>
                                                             <td><?php echo htmlspecialchars($asset['account_name']); ?></td>
                                                             <td>Asset</td>
-                                                            <td class="text-end"><?php echo format_currency($asset['balance'] ?? 0); ?></td>
+                                                            <td class="text-end"><?php echo format_currency(abs($asset['balance'] ?? 0)); ?></td>
                                                         </tr>
                                                     <?php endforeach; ?>
                                                     <tr style="font-weight: 600; background-color: #f0f0f0;">
                                                         <td>Total Assets</td>
                                                         <td></td>
-                                                        <td class="text-end"><?php echo format_currency($finTotalAssets); ?></td>
+                                                        <td class="text-end"><?php echo format_currency($displayFinTotalAssets); ?></td>
                                                     </tr>
 
                                                     <!-- Liabilities Section -->
@@ -1929,13 +1941,13 @@ try {
                                                         <tr>
                                                             <td><?php echo htmlspecialchars($liability['account_name']); ?></td>
                                                             <td>Liability</td>
-                                                            <td class="text-end"><?php echo format_currency($liability['balance'] ?? 0); ?></td>
+                                                            <td class="text-end"><?php echo format_currency(abs($liability['balance'] ?? 0)); ?></td>
                                                         </tr>
                                                     <?php endforeach; ?>
                                                     <tr style="font-weight: 600; background-color: #f0f0f0;">
                                                         <td>Total Liabilities</td>
                                                         <td></td>
-                                                        <td class="text-end"><?php echo format_currency($finTotalLiabilities); ?></td>
+                                                        <td class="text-end"><?php echo format_currency($displayFinTotalLiabilities); ?></td>
                                                     </tr>
 
                                                     <!-- Equity Section -->
@@ -1951,18 +1963,18 @@ try {
                                                         <tr>
                                                             <td><?php echo htmlspecialchars($equity['account_name']); ?></td>
                                                             <td>Equity</td>
-                                                            <td class="text-end"><?php echo format_currency($equity['balance'] ?? 0); ?></td>
+                                                            <td class="text-end"><?php echo format_currency(abs($equity['balance'] ?? 0)); ?></td>
                                                         </tr>
                                                     <?php endforeach; ?>
                                                     <tr>
-                                                        <td>Retained Earnings</td>
+                                                        <td><?php echo htmlspecialchars($retainedEarningsLabel); ?></td>
                                                         <td>Equity</td>
-                                                        <td class="text-end"><?php echo format_currency($finNetProfit); ?></td>
+                                                        <td class="text-end"><?php echo format_currency($displayFinNetProfit); ?></td>
                                                     </tr>
                                                     <tr style="font-weight: 600; background-color: #f0f0f0;">
                                                         <td>Total Equity</td>
                                                         <td></td>
-                                                        <td class="text-end"><?php echo format_currency($finTotalEquity + $finNetProfit); ?></td>
+                                                        <td class="text-end"><?php echo format_currency($displayFinTotalEquity); ?></td>
                                                     </tr>
                                                 </tbody>
                                             </table>
@@ -1976,7 +1988,7 @@ try {
                                             </div>
                                         <?php else: ?>
                                             <div class="alert alert-warning mt-3">
-                                                <strong>Note:</strong> Balance Sheet is not balanced. Assets = <?php echo format_currency($finTotalAssets); ?>, Liabilities + Equity = <?php echo format_currency($finTotalLiabilities + $finTotalEquity + $finNetProfit); ?>
+                                                <strong>Note:</strong> Balance Sheet is not balanced. Assets = <?php echo format_currency($displayFinTotalAssets); ?>, Liabilities + Equity = <?php echo format_currency(abs($finTotalLiabilities + $finTotalEquity + $finNetProfit)); ?>
                                             </div>
                                         <?php endif; ?>
                                     </div>
@@ -2006,7 +2018,7 @@ try {
                                                         <tr>
                                                             <td><?php echo htmlspecialchars($revenue['account_name']); ?></td>
                                                             <td>Revenue</td>
-                                                            <td class="text-end"><?php echo format_currency($revenue['balance'] ?? 0); ?></td>
+                                                            <td class="text-end"><?php echo format_currency(abs($revenue['balance'] ?? 0)); ?></td>
                                                         </tr>
                                                     <?php endforeach; ?>
                                                     <tr style="font-weight: 600; background-color: #f0f0f0;">
@@ -2028,7 +2040,7 @@ try {
                                                         <tr>
                                                             <td><?php echo htmlspecialchars($expense['account_name']); ?></td>
                                                             <td>Expense</td>
-                                                            <td class="text-end"><?php echo format_currency($expense['balance'] ?? 0); ?></td>
+                                                            <td class="text-end"><?php echo format_currency(abs($expense['balance'] ?? 0)); ?></td>
                                                         </tr>
                                                     <?php endforeach; ?>
                                                     <tr style="font-weight: 600; background-color: #f0f0f0;">
@@ -2039,9 +2051,9 @@ try {
 
                                                     <!-- Net Profit/Loss -->
                                                     <tr style="font-weight: 600; background-color: #f0f0f0;">
-                                                        <td>Net Income (Loss)</td>
+                                                        <td><?php echo htmlspecialchars($finNetProfitLabel); ?></td>
                                                         <td></td>
-                                                        <td class="text-end"><?php echo format_currency($finNetProfit); ?></td>
+                                                        <td class="text-end"><?php echo format_currency($displayFinNetProfit); ?></td>
                                                     </tr>
                                                 </tbody>
                                             </table>

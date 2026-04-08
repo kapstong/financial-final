@@ -101,6 +101,7 @@ try {
             coa.account_type,
             SUM(
                 CASE
+                    WHEN je.id IS NULL THEN 0
                     WHEN coa.account_type IN ('asset','expense')
                         THEN COALESCE(jel.debit, 0) - COALESCE(jel.credit, 0)
                     ELSE COALESCE(jel.credit, 0) - COALESCE(jel.debit, 0)
@@ -146,6 +147,14 @@ try {
     }
 
     $netProfit = $totalRevenue - $totalExpenses;
+    $displayTotalAssets = abs($totalAssets);
+    $displayTotalLiabilities = abs($totalLiabilities);
+    $displayNetProfit = abs($netProfit);
+    $netProfitLabel = $netProfit < 0 ? 'Net Loss' : 'Net Profit';
+    $retainedEarningsLabel = $netProfit < 0 ? 'Accumulated Loss' : 'Retained Earnings';
+    $equityAmount = $totalAssets - $totalLiabilities;
+    $displayEquity = abs($equityAmount);
+    $equityLabel = $equityAmount < 0 ? 'Equity Deficit' : 'Equity';
 
     // Fetch actual Chart of Accounts with calculated balances
     $chartOfAccountsQuery = $db->query("
@@ -158,6 +167,7 @@ try {
             coa.category,
             COALESCE(SUM(
                 CASE
+                    WHEN je.id IS NULL THEN 0
                     WHEN coa.account_type IN ('asset','expense')
                         THEN COALESCE(jel.debit, 0) - COALESCE(jel.credit, 0)
                     ELSE COALESCE(jel.credit, 0) - COALESCE(jel.debit, 0)
@@ -1197,14 +1207,14 @@ try {
             </div>
             <div class="col-md-3">
                 <div class="stats-card">
-                    <h3>&#8369;<?php echo number_format($totalAssets, 2); ?></h3>
+                    <h3>&#8369;<?php echo number_format($displayTotalAssets, 2); ?></h3>
                     <p>Total Assets <i class="fas fa-info-circle text-muted ms-1" data-bs-toggle="tooltip" title="As of the selected Trial Balance date"></i></p>
                 </div>
             </div>
             <div class="col-md-3">
                 <div class="stats-card">
-                    <h3>&#8369;<?php echo number_format($netProfit, 2); ?></h3>
-                    <p>Net Profit <i class="fas fa-info-circle text-muted ms-1" data-bs-toggle="tooltip" title="As of the selected Trial Balance date"></i></p>
+                    <h3>&#8369;<?php echo number_format($displayNetProfit, 2); ?></h3>
+                    <p><?php echo htmlspecialchars($netProfitLabel); ?> <i class="fas fa-info-circle text-muted ms-1" data-bs-toggle="tooltip" title="As of the selected Trial Balance date"></i></p>
                 </div>
             </div>
         </div>
@@ -1738,7 +1748,7 @@ try {
                     <div class="tab-pane fade show active" id="balance-sheet" role="tabpanel">
                                         <h6 class="financial-statement-title">Balance Sheet - As of <?php echo date('F j, Y', strtotime($financialDateTo)); ?> (<?php echo ucfirst($financialPeriod); ?> period)</h6>
                                         <table class="table financial-table">
-                                            <tr><th>Assets</th><th></th><th>&#8369;<?php echo number_format($totalAssets, 2); ?></th></tr>
+                                            <tr><th>Assets</th><th></th><th>&#8369;<?php echo number_format($displayTotalAssets, 2); ?></th></tr>
                                             <?php
                                             // Get asset accounts for breakdown
                                             $assetAccounts = array_filter($chartOfAccounts, function($account) {
@@ -1746,10 +1756,10 @@ try {
                                             });
                                             foreach ($assetAccounts as $asset):
                                             ?>
-                                                <tr><td>&nbsp;&nbsp;<?php echo htmlspecialchars($asset['account_name']); ?></td><td></td><td>&#8369;<?php echo number_format($asset['balance'] ?? 0, 2); ?></td></tr>
+                                                <tr><td>&nbsp;&nbsp;<?php echo htmlspecialchars($asset['account_name']); ?></td><td></td><td>&#8369;<?php echo number_format(abs($asset['balance'] ?? 0), 2); ?></td></tr>
                                             <?php endforeach; ?>
-                                            <tr><th>Liabilities</th><th></th><th>&#8369;<?php echo number_format($totalLiabilities, 2); ?></th></tr>
-                                            <tr><th>Equity</th><th></th><th>&#8369;<?php echo number_format($totalAssets - $totalLiabilities, 2); ?></th></tr>
+                                            <tr><th>Liabilities</th><th></th><th>&#8369;<?php echo number_format($displayTotalLiabilities, 2); ?></th></tr>
+                                            <tr><th><?php echo htmlspecialchars($equityLabel); ?></th><th></th><th>&#8369;<?php echo number_format($displayEquity, 2); ?></th></tr>
                                             <?php
                                             // Get equity accounts for breakdown
                                             $equityAccounts = array_filter($chartOfAccounts, function($account) {
@@ -1757,9 +1767,9 @@ try {
                                             });
                                             foreach ($equityAccounts as $equity):
                                             ?>
-                                                <tr><td>&nbsp;&nbsp;<?php echo htmlspecialchars($equity['account_name']); ?></td><td></td><td>&#8369;<?php echo number_format($equity['balance'] ?? 0, 2); ?></td></tr>
+                                                <tr><td>&nbsp;&nbsp;<?php echo htmlspecialchars($equity['account_name']); ?></td><td></td><td>&#8369;<?php echo number_format(abs($equity['balance'] ?? 0), 2); ?></td></tr>
                                             <?php endforeach; ?>
-                                            <tr class="total-row"><td>&nbsp;&nbsp;Retained Earnings</td><td></td><td>&#8369;<?php echo number_format($netProfit, 2); ?></td></tr>
+                                            <tr class="total-row"><td>&nbsp;&nbsp;<?php echo htmlspecialchars($retainedEarningsLabel); ?></td><td></td><td>&#8369;<?php echo number_format($displayNetProfit, 2); ?></td></tr>
                                         </table>
                                     </div>
                                     <div class="tab-pane fade" id="income-statement" role="tabpanel">
@@ -1785,7 +1795,7 @@ try {
                                             ?>
                                                 <tr><td>&nbsp;&nbsp;<?php echo htmlspecialchars($expense['account_name']); ?></td><td></td><td>&#8369;<?php echo number_format($expense['balance'] ?? 0, 2); ?></td></tr>
                                             <?php endforeach; ?>
-                                            <tr class="total-row"><th>Net Profit</th><th></th><th>&#8369;<?php echo number_format($netProfit, 2); ?></th></tr>
+                                            <tr class="total-row"><th><?php echo htmlspecialchars($netProfitLabel); ?></th><th></th><th>&#8369;<?php echo number_format($displayNetProfit, 2); ?></th></tr>
                                         </table>
                                     </div>
                                     <div class="tab-pane fade" id="cash-flow" role="tabpanel">
