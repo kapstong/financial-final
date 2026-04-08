@@ -16,7 +16,6 @@ cache/
 
 # Environment variables
 .env
-.env.production
 config/app.key
 
 # IDE files

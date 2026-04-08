@@ -4,7 +4,7 @@
  * Loads environment variables and provides configuration management
  */
 
-// Load production config if on production domain
+// Load production host/runtime overrides if on production domain.
 if (isset($_SERVER['HTTP_HOST']) && $_SERVER['HTTP_HOST'] === 'financial.atierahotelandrestaurant.com') {
     require_once __DIR__ . '/config_production.php';
 }
@@ -109,9 +109,7 @@ function resolveRecaptchaKey($name) {
     return $configured !== '' ? $configured : '';
 }
 
-if ((getenv('APP_ENV') ?: '') === 'production') {
-    loadEnv(__DIR__ . '/.env.production');
-}
+// Runtime configuration comes from a single env file: /.env
 loadEnv(__DIR__ . '/.env');
 resolveAppKey();
 

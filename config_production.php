@@ -2,9 +2,8 @@
 /**
  * Production bootstrap overrides.
  *
- * This file intentionally avoids embedding secrets. Production credentials and
- * service keys must come from process environment variables or an untracked
- * env file on the server.
+ * This file intentionally avoids embedding secrets. Runtime secrets should live
+ * in the single /.env file on the server, not in a separate production env file.
  */
 
 putenv('APP_ENV=production');
