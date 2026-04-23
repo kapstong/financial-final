@@ -132,7 +132,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $mailer = Mailer::getInstance();
                 $firstName = $user['first_name'] ?? '';
-                $mailer->sendVerificationCode($email, $code, $firstName);
+                $sent = $mailer->sendVerificationCode($email, $code, $firstName);
+                if (!$sent) {
+                    throw new Exception($mailer->getLastError() ?: 'Unable to send verification email.');
+                }
 
                 $qrMaskedEmail = maskEmail($email);
                 $message = 'Verification code sent to ' . $qrMaskedEmail . '.';
@@ -189,7 +192,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         if ($email) {
                             $mailer = Mailer::getInstance();
                             $firstName = $user['first_name'] ?? '';
-                            $mailer->sendVerificationCode($email, $code, $firstName);
+                            $sent = $mailer->sendVerificationCode($email, $code, $firstName);
+                            if (!$sent) {
+                                throw new Exception($mailer->getLastError() ?: 'Unable to send verification email.');
+                            }
                             $qrMaskedEmail = maskEmail($email);
                             $message = 'Verification required. We sent a code to ' . $qrMaskedEmail . '.';
                         }
