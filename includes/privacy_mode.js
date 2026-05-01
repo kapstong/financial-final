@@ -216,15 +216,7 @@
             },
             body: 'code=' + encodeURIComponent(code)
         })
-        .then(response => {
-            // Check for network errors
-            if (!response.ok) {
-                throw new Error('HTTP ' + response.status + ': ' + response.statusText);
-            }
-            return response.json().catch(() => {
-                throw new Error('Invalid response from server');
-            });
-        })
+        .then(parseApiResponse)
         .then(data => {
             if (data.success) {
                 // Success - show amounts
@@ -723,6 +715,28 @@
         });
     }
 
+    function parseApiResponse(response) {
+        return response.text().then(text => {
+            let data = null;
+
+            if (text) {
+                try {
+                    data = JSON.parse(text);
+                } catch (error) {
+                    console.error('API JSON parse error:', error, 'Text:', text);
+                    throw new Error('Server returned an invalid response');
+                }
+            }
+
+            if (!response.ok) {
+                const message = data && (data.error || data.message);
+                throw new Error(message || ('HTTP ' + response.status));
+            }
+
+            return data || {};
+        });
+    }
+
     function prepareVerification() {
         verificationReady = false;
 
@@ -753,24 +767,7 @@
                 'Content-Type': 'application/x-www-form-urlencoded',
             }
         })
-        .then(response => {
-            // Get response text first to debug
-            return response.text().then(text => {
-                console.log('OTP API Response:', response.status, text);
-                
-                if (!response.ok) {
-                    throw new Error('HTTP ' + response.status);
-                }
-                
-                // Try to parse JSON
-                try {
-                    return JSON.parse(text);
-                } catch (e) {
-                    console.error('JSON Parse Error:', e, 'Text:', text);
-                    throw new Error('Server returned invalid response');
-                }
-            });
-        })
+        .then(parseApiResponse)
         .then(data => {
             if (data.success) {
                 verificationReady = true;
