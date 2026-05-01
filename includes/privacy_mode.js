@@ -77,42 +77,46 @@
     }
 
     /**
-     * Create verification code modal
+     * Create verification OTP modal (new clean implementation)
      */
     function createPasswordModal() {
         const modalHTML = `
             <div id="privacyPasswordModal" class="modal fade" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
                 <div class="modal-dialog modal-dialog-centered">
                     <div class="modal-content">
-                        <div class="modal-header bg-primary text-white">
+                        <div class="modal-header bg-primary text-white border-0">
                             <h5 class="modal-title">
-                                <i class="fas fa-shield-alt me-2"></i>Verification Required
+                                <i class="fas fa-lock me-2"></i>Verify Your Identity
                             </h5>
-                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                         </div>
-                        <div class="modal-body">
-                            <div class="alert alert-info" id="privacyVerificationMessage">
-                                <i class="fas fa-info-circle me-2"></i>
-                                <strong>Protected Information</strong><br>
-                                Enter the 6-digit code sent to your email.
+                        <div class="modal-body pt-4">
+                            <div class="text-center mb-4">
+                                <p class="text-muted mb-1">For security, we need to verify your identity</p>
+                                <p class="text-muted small">A 6-digit code has been sent to your email</p>
                             </div>
 
-                            <form id="privacyCodeForm">
+                            <form id="privacyCodeForm" class="mb-3">
                                 <div class="mb-3">
-                                    <label for="privacyCode" class="form-label">Enter 6-Digit Code</label>
+                                    <label for="privacyCode" class="form-label fw-bold">Enter 6-Digit Code</label>
                                     <input type="text" class="form-control form-control-lg text-center"
                                            id="privacyCode" placeholder="000000" maxlength="6"
                                            pattern="[0-9]{6}" required autofocus
                                            autocomplete="one-time-code"
-                                           style="font-size: 24px; letter-spacing: 8px;">
-                                    <div class="invalid-feedback" id="privacyCodeError"></div>
+                                           inputmode="numeric"
+                                           style="font-size: 28px; letter-spacing: 6px; font-weight: bold;">
+                                    <div class="invalid-feedback d-block" id="privacyCodeError" style="display: none;"></div>
                                 </div>
                             </form>
+
+                            <div id="privacyOtpStatus" class="alert alert-info d-none">
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                                <span id="privacyOtpStatusText">Sending code...</span>
+                            </div>
                         </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                            <button type="button" class="btn btn-success" id="privacyVerifyBtn">
-                                <i class="fas fa-unlock me-2"></i>Verify & Show Amounts
+                        <div class="modal-footer border-0">
+                            <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                            <button type="button" class="btn btn-primary" id="privacyVerifyBtn">
+                                <i class="fas fa-check me-2"></i>Verify
                             </button>
                         </div>
                     </div>
@@ -123,25 +127,37 @@
         document.body.insertAdjacentHTML('beforeend', modalHTML);
 
         // Event listeners
-        document.getElementById('privacyCodeForm').addEventListener('submit', (e) => {
-            e.preventDefault();
-            verifyCodeAndShow();
-        });
-        document.getElementById('privacyVerifyBtn').addEventListener('click', verifyCodeAndShow);
+        const form = document.getElementById('privacyCodeForm');
+        const codeInput = document.getElementById('privacyCode');
+        const verifyBtn = document.getElementById('privacyVerifyBtn');
+        const errorDiv = document.getElementById('privacyCodeError');
+
+        if (form) {
+            form.addEventListener('submit', (e) => {
+                e.preventDefault();
+                verifyCodeAndShow();
+            });
+        }
+
+        if (verifyBtn) {
+            verifyBtn.addEventListener('click', verifyCodeAndShow);
+        }
 
         // Auto-verify when 6 digits entered
-        document.getElementById('privacyCode').addEventListener('input', (e) => {
-            const code = e.target.value;
-            e.target.classList.remove('is-invalid');
-            document.getElementById('privacyCodeError').textContent = '';
-            if (code.length === 6 && /^\d{6}$/.test(code)) {
-                verifyCodeAndShow();
-            }
-        });
+        if (codeInput) {
+            codeInput.addEventListener('input', (e) => {
+                const code = e.target.value;
+                e.target.classList.remove('is-invalid');
+                if (errorDiv) errorDiv.style.display = 'none';
+                if (code.length === 6 && /^\d{6}$/.test(code)) {
+                    verifyCodeAndShow();
+                }
+            });
+        }
     }
 
     /**
-     * Verify code and show amounts
+     * Verify OTP code and show amounts (new clean implementation)
      */
     function verifyCodeAndShow() {
         const codeInput = document.getElementById('privacyCode');
@@ -149,58 +165,67 @@
         const verifyBtn = document.getElementById('privacyVerifyBtn');
         const code = codeInput.value;
 
-        if (!verificationReady) {
+        if (!code || code.length !== 6 || !/^\d{6}$/.test(code)) {
             codeInput.classList.add('is-invalid');
-            errorDiv.textContent = 'Verification is not ready for this account.';
-            return;
-        }
-
-        if (!code || code.length !== 6) {
-            codeInput.classList.add('is-invalid');
-            errorDiv.textContent = 'Please enter a 6-digit code';
+            if (errorDiv) {
+                errorDiv.textContent = 'Please enter a 6-digit code';
+                errorDiv.style.display = 'block';
+            }
             return;
         }
 
         const originalBtnText = verifyBtn.innerHTML;
+        const originalBtnState = verifyBtn.disabled;
         verifyBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Verifying...';
         verifyBtn.disabled = true;
         codeInput.disabled = true;
 
-        const apiPath = getApiPath('privacy_code.php');
+        const apiPath = getApiPath('otp.php');
 
-        fetch(apiPath, {
+        fetch(apiPath + '?action=verify', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
             },
-            body: 'action=verify_code&code=' + encodeURIComponent(code)
+            body: 'code=' + encodeURIComponent(code)
         })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('HTTP ' + response.status);
+            }
+            return response.json();
+        })
         .then(data => {
             if (data.success) {
                 showAmounts();
-
-                const modal = bootstrap.Modal.getInstance(document.getElementById('privacyPasswordModal'));
-                modal.hide();
-
                 codeInput.value = '';
                 codeInput.classList.remove('is-invalid');
+                if (errorDiv) errorDiv.style.display = 'none';
+                
+                const modal = bootstrap.Modal.getInstance(document.getElementById('privacyPasswordModal'));
+                if (modal) {
+                    modal.hide();
+                }
             } else {
                 codeInput.classList.add('is-invalid');
-                errorDiv.textContent = data.error || 'Incorrect code';
-
+                if (errorDiv) {
+                    errorDiv.textContent = data.error || 'Invalid code';
+                    errorDiv.style.display = 'block';
+                }
                 verifyBtn.innerHTML = originalBtnText;
-                verifyBtn.disabled = false;
+                verifyBtn.disabled = originalBtnState;
                 codeInput.disabled = false;
                 codeInput.focus();
             }
         })
         .catch(error => {
             codeInput.classList.add('is-invalid');
-            errorDiv.textContent = 'Network error. Please try again.';
-
+            if (errorDiv) {
+                errorDiv.textContent = 'Network error. Please try again.';
+                errorDiv.style.display = 'block';
+            }
             verifyBtn.innerHTML = originalBtnText;
-            verifyBtn.disabled = false;
+            verifyBtn.disabled = originalBtnState;
             codeInput.disabled = false;
             codeInput.focus();
         });
@@ -675,69 +700,61 @@
     function prepareVerification() {
         verificationReady = false;
 
-        const apiPath = getApiPath('privacy_code.php');
-        const messageEl = document.getElementById('privacyVerificationMessage');
+        const apiPath = getApiPath('otp.php');
         const codeInput = document.getElementById('privacyCode');
         const verifyBtn = document.getElementById('privacyVerifyBtn');
         const errorDiv = document.getElementById('privacyCodeError');
+        const statusDiv = document.getElementById('privacyOtpStatus');
+        const statusText = document.getElementById('privacyOtpStatusText');
 
-        if (!messageEl || !codeInput || !verifyBtn) {
+        if (!codeInput || !verifyBtn) {
             return;
         }
 
-        messageEl.className = 'alert alert-info';
-        messageEl.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Checking verification method...';
+        // Reset form
         codeInput.disabled = true;
         verifyBtn.disabled = true;
         codeInput.value = '';
         codeInput.classList.remove('is-invalid');
-        errorDiv.textContent = '';
+        if (errorDiv) errorDiv.style.display = 'none';
 
-        // First check if 2FA is configured for this user
-        fetch(apiPath + '?action=check_method', {
-            method: 'GET'
+        // Show status
+        if (statusDiv) {
+            statusDiv.classList.remove('d-none');
+            if (statusText) statusText.textContent = 'Sending OTP to your email...';
+        }
+
+        // Send OTP
+        fetch(apiPath + '?action=send', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            }
         })
         .then(response => {
             if (!response.ok) {
-                return response.text().then(text => {
-                    throw new Error(`HTTP ${response.status}: ${text || 'Unknown error'}`);
-                });
+                throw new Error('HTTP ' + response.status);
             }
             return response.json();
         })
         .then(data => {
-            if (!data.success) {
-                throw new Error(data.error || 'Verification is not available for this account.');
+            if (data.success) {
+                verificationReady = true;
+                if (statusDiv) statusDiv.classList.add('d-none');
+                codeInput.disabled = false;
+                verifyBtn.disabled = false;
+                setTimeout(() => codeInput.focus(), 100);
+            } else {
+                throw new Error(data.error || 'Failed to send OTP');
             }
-
-            // 2FA is configured, now request the code to be sent
-            return fetch(apiPath + '?action=send_code', {
-                method: 'GET'
-            }).then(response => {
-                if (!response.ok) {
-                    return response.text().then(text => {
-                        throw new Error(`HTTP ${response.status}: ${text || 'Failed to send code'}`);
-                    });
-                }
-                return response.json();
-            });
-        })
-        .then(data => {
-            if (!data.success) {
-                throw new Error(data.error || 'Failed to send verification code.');
-            }
-
-            verificationReady = true;
-            messageEl.className = 'alert alert-info';
-            messageEl.innerHTML = '<i class="fas fa-envelope me-2"></i><strong>Protected Information</strong><br>A 6-digit code has been sent to your email. Enter it below.';
-            codeInput.disabled = false;
-            verifyBtn.disabled = false;
-            setTimeout(() => codeInput.focus(), 100);
         })
         .catch(error => {
             verificationReady = false;
-            messageEl.className = 'alert alert-warning';
-            messageEl.innerHTML = '<i class="fas fa-exclamation-triangle me-2"></i>' + (error.message || 'Verification is not configured for this account.');
+            if (statusDiv) statusDiv.classList.add('d-none');
+            if (errorDiv) {
+                errorDiv.textContent = error.message || 'Failed to send OTP. Please try again.';
+                errorDiv.style.display = 'block';
+            }
             codeInput.disabled = true;
             verifyBtn.disabled = true;
         });
