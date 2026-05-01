@@ -96,8 +96,9 @@ try {
     
     // Check if user is logged in
     if (!isset($_SESSION['user'])) {
+        $debugLog('Session user not set. Session data: ' . json_encode($_SESSION));
         http_response_code(401);
-        echo json_encode(['error' => 'Unauthorized']);
+        echo json_encode(['error' => 'Unauthorized', 'debug' => 'No session user']);
         ob_end_flush();
         exit;
     }
@@ -152,12 +153,16 @@ try {
  */
 function handleCheckMethod($user) {
     try {
+        $log = function($msg) { error_log('[privacy_code.php] ' . $msg); };
+        $log('handleCheckMethod started');
+        
         $db = Database::getInstance()->getConnection();
         ensureEmailCodesTable($db);
         cleanupExpiredEmailCodes($db);
 
         $account = getPrivacyVerificationUser($db, (int)($user['id'] ?? 0));
         if (!$account || empty($account['email'])) {
+            $log('User account or email not found for ID: ' . ($user['id'] ?? 'unknown'));
             http_response_code(400);
             echo json_encode([
                 'success' => false,
@@ -171,10 +176,13 @@ function handleCheckMethod($user) {
         // If the request intended to send a code, send it now
         $action = $_GET['action'] ?? $_POST['action'] ?? '';
         if ($action === 'send_code') {
+            $log('Sending verification code');
             $result = sendPrivacyEmailCode($db, $account);
             if (!empty($result['success'])) {
+                $log('Code sent successfully');
                 echo json_encode(['success' => true, 'method' => $method, 'message' => 'Verification code sent to your email.']);
             } else {
+                $log('Failed to send code: ' . ($result['error'] ?? 'unknown error'));
                 http_response_code(500);
                 echo json_encode(['success' => false, 'error' => $result['error'] ?? 'Failed to send code']);
             }
@@ -188,6 +196,7 @@ function handleCheckMethod($user) {
         ]);
 
     } catch (Exception $e) {
+        error_log('[privacy_code.php] Exception in handleCheckMethod: ' . $e->getMessage());
         http_response_code(500);
         echo json_encode(['error' => 'Failed to prepare verification: ' . $e->getMessage()]);
     }
@@ -198,20 +207,28 @@ function handleCheckMethod($user) {
  */
 function handleVerifyCode($user) {
     try {
+        $log = function($msg) { error_log('[privacy_code.php] ' . $msg); };
+        $log('handleVerifyCode started for user ' . ($user['id'] ?? 'unknown'));
+        
         $db = Database::getInstance()->getConnection();
         ensureEmailCodesTable($db);
         cleanupExpiredEmailCodes($db);
 
         $code = $_POST['code'] ?? '';
+        $log('Code received: ' . ($code ? 'yes' : 'empty'));
 
         if (!preg_match('/^\d{6}$/', (string)$code)) {
+            $log('Invalid code format: ' . $code);
             http_response_code(400);
             echo json_encode(['error' => 'A valid 6-digit code is required']);
             return;
         }
 
+        $log('About to verify code for user ' . (int)$user['id']);
         $verified = verifyPrivacyEmailCode($db, (int)$user['id'], (string)$code);
+        
         if ($verified) {
+            $log('Code verified successfully');
             // Mark as unlocked in session
             $_SESSION['privacy_unlocked'] = true;
             $_SESSION['privacy_unlocked_time'] = time();
@@ -223,11 +240,13 @@ function handleVerifyCode($user) {
                 'message' => 'Verification code accepted'
             ]);
         } else {
+            $log('Code verification failed');
             http_response_code(400);
             echo json_encode(['error' => 'Invalid or expired verification code']);
         }
 
     } catch (Exception $e) {
+        error_log('[privacy_code.php] Exception in handleVerifyCode: ' . $e->getMessage());
         http_response_code(500);
         echo json_encode(['error' => 'Verification failed: ' . $e->getMessage()]);
     }
