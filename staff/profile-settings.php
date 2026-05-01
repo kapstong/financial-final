@@ -939,11 +939,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 Two-factor authentication adds an extra layer of security to your account.
                             </div>
                             <div class="form-check mb-2">
-                                <input class="form-check-input" type="radio" name="twofa" id="totp" value="totp">
-                                <label class="form-check-label fw-bold" for="totp">
-                                    TOTP (Time-based One-Time Password)
+                                <input class="form-check-input" type="radio" name="twofa" id="email" value="email">
+                                <label class="form-check-label fw-bold" for="email">
+                                    Email (6-digit One-Time Password)
                                 </label>
-                                <small class="d-block text-muted ms-4">Use email codes (a 6-digit code will be sent to your account email)</small>
+                                <small class="d-block text-muted ms-4">A 6-digit code will be sent to your account email</small>
                             </div>
                             <div class="form-check mb-3">
                                 <input class="form-check-input" type="radio" name="twofa" id="sms" value="sms">

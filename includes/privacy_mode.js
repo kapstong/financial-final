@@ -693,7 +693,8 @@
         codeInput.classList.remove('is-invalid');
         errorDiv.textContent = '';
 
-        fetch(apiPath + '?action=check_method', {
+        // Request the server to send a verification code and return method info
+        fetch(apiPath + '?action=send_code', {
             method: 'GET'
         })
         .then(response => response.json())

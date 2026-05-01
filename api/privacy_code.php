@@ -152,7 +152,7 @@ function handleVerifyCode($user) {
 
         if (!preg_match('/^\d{6}$/', (string)$code)) {
             http_response_code(400);
-            echo json_encode(['error' => 'A valid 6-digit authenticator code is required']);
+            echo json_encode(['error' => 'A valid 6-digit code is required']);
             return;
         }
 

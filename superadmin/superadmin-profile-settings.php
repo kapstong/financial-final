@@ -661,11 +661,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <form method="POST" action="" class="mb-3">
                                 <?php csrf_input(); ?>
                                 <div class="form-check mb-2">
-                                    <input class="form-check-input" type="radio" name="twofa" id="totp" value="totp" checked>
-                                    <label class="form-check-label fw-bold" for="totp">
-                                        TOTP (Time-based One-Time Password)
+                                    <input class="form-check-input" type="radio" name="twofa" id="email" value="email" checked>
+                                    <label class="form-check-label fw-bold" for="email">
+                                        Email (6-digit One-Time Password)
                                     </label>
-                                    <small class="d-block text-muted ms-4">Use email codes (a 6-digit code will be sent to your account email)</small>
+                                    <small class="d-block text-muted ms-4">A 6-digit code will be sent to your account email</small>
                                 </div>
                                 <div class="form-check mb-3">
                                     <input class="form-check-input" type="radio" name="twofa" id="sms" value="sms">
