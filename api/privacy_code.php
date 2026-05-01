@@ -26,7 +26,9 @@ set_error_handler(function($errno, $errstr, $errfile, $errline) {
     }
 
     http_response_code(500);
-    echo json_encode(['error' => 'Server error: ' . $errstr]);
+    $errorMsg = "Error in {$errfile}:{$errline}: {$errstr}";
+    echo json_encode(['error' => $errorMsg, 'errno' => $errno]);
+    error_log($errorMsg);
     ob_end_flush();
     exit(1);
 }, E_ALL);
@@ -40,7 +42,15 @@ set_exception_handler(function($exception) {
 });
 
 try {
+    // Start session FIRST before anything else
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+
     // Load required files
+    if (file_exists(__DIR__ . '/../config.php')) {
+        require_once __DIR__ . '/../config.php';
+    }
     if (file_exists(__DIR__ . '/../includes/auth.php')) {
         require_once __DIR__ . '/../includes/auth.php';
     }
@@ -55,10 +65,6 @@ try {
     }
     if (file_exists(__DIR__ . '/../includes/two_factor_auth.php')) {
         require_once __DIR__ . '/../includes/two_factor_auth.php';
-    }
-
-    if (session_status() === PHP_SESSION_NONE) {
-        session_start();
     }
 
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
