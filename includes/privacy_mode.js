@@ -693,19 +693,43 @@
         codeInput.classList.remove('is-invalid');
         errorDiv.textContent = '';
 
-        // Request the server to send a verification code and return method info
-        fetch(apiPath + '?action=send_code', {
+        // First check if 2FA is configured for this user
+        fetch(apiPath + '?action=check_method', {
             method: 'GET'
         })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                return response.text().then(text => {
+                    throw new Error(`HTTP ${response.status}: ${text || 'Unknown error'}`);
+                });
+            }
+            return response.json();
+        })
         .then(data => {
             if (!data.success) {
                 throw new Error(data.error || 'Verification is not available for this account.');
             }
 
+            // 2FA is configured, now request the code to be sent
+            return fetch(apiPath + '?action=send_code', {
+                method: 'GET'
+            }).then(response => {
+                if (!response.ok) {
+                    return response.text().then(text => {
+                        throw new Error(`HTTP ${response.status}: ${text || 'Failed to send code'}`);
+                    });
+                }
+                return response.json();
+            });
+        })
+        .then(data => {
+            if (!data.success) {
+                throw new Error(data.error || 'Failed to send verification code.');
+            }
+
             verificationReady = true;
             messageEl.className = 'alert alert-info';
-            messageEl.innerHTML = '<i class="fas fa-mobile-alt me-2"></i><strong>Protected Information</strong><br>Use the 6-digit code sent to your email.';
+            messageEl.innerHTML = '<i class="fas fa-envelope me-2"></i><strong>Protected Information</strong><br>A 6-digit code has been sent to your email. Enter it below.';
             codeInput.disabled = false;
             verifyBtn.disabled = false;
             setTimeout(() => codeInput.focus(), 100);
