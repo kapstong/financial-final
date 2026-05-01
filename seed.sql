@@ -72,3 +72,16 @@ ON DUPLICATE KEY UPDATE
     data_sharing = VALUES(data_sharing),
     require_2fa = VALUES(require_2fa),
     updated_at = VALUES(updated_at);
+
+-- Create email_codes table used for email-based 2FA verification codes
+CREATE TABLE IF NOT EXISTS email_codes (
+    id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    user_id INT UNSIGNED NOT NULL,
+    email VARCHAR(255) NOT NULL,
+    code VARCHAR(10) NOT NULL,
+    expires_at DATETIME NOT NULL,
+    created_at DATETIME NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY ux_email_codes_user_email (user_id, email),
+    KEY idx_email_codes_expires_at (expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
