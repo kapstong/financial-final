@@ -14,6 +14,13 @@ ob_start();
 ini_set('display_errors', 0);
 error_reporting(E_ALL);
 
+// Log to file for debugging
+$debugLog = function($msg) {
+    error_log('[privacy_code.php] ' . $msg);
+};
+
+$debugLog('API call started');
+
 // Set up error handler to catch and output errors as JSON
 set_error_handler(function($errno, $errstr, $errfile, $errline) {
     if (!(error_reporting() & $errno)) {
@@ -25,10 +32,10 @@ set_error_handler(function($errno, $errstr, $errfile, $errline) {
         return true;
     }
 
-    http_response_code(500);
     $errorMsg = "Error in {$errfile}:{$errline}: {$errstr}";
-    echo json_encode(['error' => $errorMsg, 'errno' => $errno]);
     error_log($errorMsg);
+    http_response_code(500);
+    echo json_encode(['error' => $errorMsg, 'errno' => $errno]);
     ob_end_flush();
     exit(1);
 }, E_ALL);
@@ -42,32 +49,50 @@ set_exception_handler(function($exception) {
 });
 
 try {
+    $debugLog('Files: starting load');
+
     // Start session FIRST before anything else
     if (session_status() === PHP_SESSION_NONE) {
         session_start();
     }
+    $debugLog('Session started');
 
-    // Load required files
-    if (file_exists(__DIR__ . '/../config.php')) {
-        require_once __DIR__ . '/../config.php';
+    // Load required files - catch any load errors
+    $files = [
+        __DIR__ . '/../config.php',
+        __DIR__ . '/../includes/auth.php',
+        __DIR__ . '/../includes/database.php',
+        __DIR__ . '/../includes/logger.php',
+        __DIR__ . '/../includes/mailer.php',
+        __DIR__ . '/../includes/two_factor_auth.php'
+    ];
+
+    foreach ($files as $file) {
+        if (file_exists($file)) {
+            $debugLog("Loading {$file}");
+            require_once $file;
+            $debugLog("Loaded {$file}");
+        } else {
+            throw new Exception("File not found: {$file}");
+        }
     }
-    if (file_exists(__DIR__ . '/../includes/auth.php')) {
-        require_once __DIR__ . '/../includes/auth.php';
-    }
-    if (file_exists(__DIR__ . '/../includes/database.php')) {
-        require_once __DIR__ . '/../includes/database.php';
-    }
-    if (file_exists(__DIR__ . '/../includes/logger.php')) {
-        require_once __DIR__ . '/../includes/logger.php';
-    }
-    if (file_exists(__DIR__ . '/../includes/mailer.php')) {
-        require_once __DIR__ . '/../includes/mailer.php';
-    }
-    if (file_exists(__DIR__ . '/../includes/two_factor_auth.php')) {
-        require_once __DIR__ . '/../includes/two_factor_auth.php';
-    }
+
+    $debugLog('All files loaded successfully');
+    $debugLog('Session user: ' . (isset($_SESSION['user']) ? 'set' : 'not set'));
 
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+    $action = $_GET['action'] ?? $_POST['action'] ?? '';
+    
+    // Debug endpoint - no auth needed
+    if ($action === 'debug') {
+        echo json_encode([
+            'status' => 'ok',
+            'timestamp' => date('Y-m-d H:i:s'),
+            'includes_loaded' => true
+        ]);
+        ob_end_flush();
+        exit;
+    }
     
     // Check if user is logged in
     if (!isset($_SESSION['user'])) {
@@ -77,24 +102,29 @@ try {
         exit;
     }
 
-    $action = $_GET['action'] ?? $_POST['action'] ?? '';
     $user = $_SESSION['user'];
+    
+    $debugLog("Action: {$action}");
     
     switch ($action) {
         case 'send_code':
         case 'check_method':
+            $debugLog('Calling handleCheckMethod');
             handleCheckMethod($user);
             break;
 
         case 'verify_code':
+            $debugLog('Calling handleVerifyCode');
             handleVerifyCode($user);
             break;
 
         case 'set_visibility':
+            $debugLog('Calling handleSetVisibility');
             handleSetVisibility($user);
             break;
 
         case 'check_status':
+            $debugLog('Calling handleCheckStatus');
             handleCheckStatus($user);
             break;
             
@@ -104,6 +134,7 @@ try {
     }
 
 } catch (Exception $e) {
+    $debugLog('Exception caught: ' . $e->getMessage());
     http_response_code(500);
     echo json_encode(['error' => 'Server error: ' . $e->getMessage()]);
 }
