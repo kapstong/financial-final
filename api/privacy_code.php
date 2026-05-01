@@ -111,32 +111,40 @@ try {
         case 'check_method':
             $debugLog('Calling handleCheckMethod');
             handleCheckMethod($user);
-            break;
+            ob_end_flush();
+            exit;
 
         case 'verify_code':
             $debugLog('Calling handleVerifyCode');
             handleVerifyCode($user);
-            break;
+            ob_end_flush();
+            exit;
 
         case 'set_visibility':
             $debugLog('Calling handleSetVisibility');
             handleSetVisibility($user);
-            break;
+            ob_end_flush();
+            exit;
 
         case 'check_status':
             $debugLog('Calling handleCheckStatus');
             handleCheckStatus($user);
-            break;
+            ob_end_flush();
+            exit;
             
         default:
             http_response_code(400);
             echo json_encode(['error' => 'Invalid action']);
+            ob_end_flush();
+            exit;
     }
 
 } catch (Exception $e) {
     $debugLog('Exception caught: ' . $e->getMessage());
     http_response_code(500);
     echo json_encode(['error' => 'Server error: ' . $e->getMessage()]);
+    ob_end_flush();
+    exit;
 }
 
 /**
@@ -407,7 +415,5 @@ function verifyPrivacyEmailCode(PDO $db, int $userId, string $code): bool
 
     return true;
 }
-
-ob_end_flush();
 ?>
 
