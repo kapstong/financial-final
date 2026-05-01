@@ -164,7 +164,7 @@ include 'legacy_header.php';
                     <div class="card">
                         <div class="card-body text-center">
                             <h3 class="text-info"><?php echo $stats['totp_users']; ?></h3>
-                            <p class="text-muted mb-0">TOTP Users</p>
+                            <p class="text-muted mb-0">Email OTP Users</p>
                         </div>
                     </div>
                 </div>
@@ -225,8 +225,8 @@ include 'legacy_header.php';
                                     <td><?php echo htmlspecialchars($user2fa['full_name']); ?></td>
                                     <td><?php echo htmlspecialchars($user2fa['email']); ?></td>
                                     <td>
-                                        <span class="badge bg-<?php echo $user2fa['method'] === 'totp' ? 'primary' : 'info'; ?>">
-                                            <?php echo strtoupper($user2fa['method']); ?>
+                                        <span class="badge bg-<?php echo $user2fa['method'] === 'email' ? 'primary' : 'info'; ?>">
+                                            <?php echo strtoupper($user2fa['method'] === 'totp' ? 'email' : $user2fa['method']); ?>
                                         </span>
                                     </td>
                                     <td><?php echo date('M j, Y H:i', strtotime($user2fa['created_at'])); ?></td>
@@ -308,7 +308,7 @@ include 'legacy_header.php';
                         <div class="col-md-6">
                             <h6><i class="fas fa-check-circle text-success"></i> Best Practices</h6>
                             <ul class="list-unstyled">
-                                <li><i class="fas fa-check text-success"></i> Encourage TOTP over SMS for better security</li>
+                                <li><i class="fas fa-check text-success"></i> Encourage Email OTP over SMS for better security</li>
                                 <li><i class="fas fa-check text-success"></i> Regularly monitor failed login attempts</li>
                                 <li><i class="fas fa-check text-success"></i> Implement account lockout after multiple failures</li>
                                 <li><i class="fas fa-check text-success"></i> Require 2FA for administrative accounts</li>
@@ -447,7 +447,7 @@ function showFailedAttempts() {
 // Show 2FA statistics
 function show2FAStats() {
     // This could be expanded to show more detailed statistics
-    alert('2FA Statistics:\n\nTotal Users: <?php echo $stats['total_users']; ?>\n2FA Enabled: <?php echo $stats['enabled_users']; ?>\nTOTP Users: <?php echo $stats['totp_users']; ?>\nSMS Users: <?php echo $stats['sms_users']; ?>');
+    alert('2FA Statistics:\n\nTotal Users: <?php echo $stats['total_users']; ?>\n2FA Enabled: <?php echo $stats['enabled_users']; ?>\nEmail OTP Users: <?php echo $stats['totp_users']; ?>\nSMS Users: <?php echo $stats['sms_users']; ?>');
 }
 
 // Reset user 2FA
