@@ -9,6 +9,7 @@ class Mailer {
     private $fromEmail;
     private $fromName;
     private $usePHPMailer = false;
+    private $useSymfonyMailer = false;
     private $smtpEnabled = false;
     private $smtpHost;
     private $smtpPort;
@@ -24,6 +25,7 @@ class Mailer {
             require_once $autoloadPath;
         }
 
+        $this->useSymfonyMailer = class_exists('Symfony\\Component\\Mailer\\Mailer') && class_exists('Symfony\\Component\\Mime\\Email');
         $this->usePHPMailer = class_exists('PHPMailer\\PHPMailer\\PHPMailer');
 
         $configuredFromEmail = Config::get('mail.from_address') ?: 'noreply@atiera.com';
@@ -247,6 +249,48 @@ class Mailer {
     }
 
     private function sendSmtp($to, $subject, $message, $headers) {
+        // Prefer Symfony Mailer if available, then PHPMailer. Symfony provides a modern API and provider transports.
+        if ($this->useSymfonyMailer) {
+            try {
+                $enc = strtolower($this->smtpEncryption);
+                $scheme = ($enc === 'ssl') ? 'smtps' : 'smtp';
+                $host = $this->smtpHost;
+                $port = $this->smtpPort;
+
+                $dsn = $scheme . '://';
+                if (!empty($this->smtpUser)) {
+                    $dsn .= rawurlencode($this->smtpUser) . ':' . rawurlencode($this->smtpPass) . '@';
+                }
+                $dsn .= $host . ':' . $port;
+                if ($enc === 'tls') {
+                    $dsn .= '?encryption=starttls';
+                }
+
+                $transport = \Symfony\Component\Mailer\Transport::fromDsn($dsn);
+                $symMailer = new \Symfony\Component\Mailer\Mailer($transport);
+
+                $email = (new \Symfony\Component\Mime\Email())
+                    ->from($this->getEnvelopeFromEmail())
+                    ->to($to)
+                    ->subject($subject);
+
+                // prefer html if message contains HTML or headers indicate html
+                $isHtml = stripos($headers, 'Content-Type: text/html') !== false || stripos($message, '<html') !== false;
+                if ($isHtml) {
+                    $email->html($message)->text(strip_tags($message));
+                } else {
+                    $email->text($message);
+                }
+
+                $symMailer->send($email);
+                return true;
+            } catch (\Throwable $e) {
+                $this->lastError = 'Symfony Mailer Exception: ' . $e->getMessage();
+                error_log($this->lastError);
+                // fall through to PHPMailer or legacy socket fallback
+            }
+        }
+
         // Prefer PHPMailer if available - it's more robust and handles edge cases
         if ($this->usePHPMailer) {
             try {
