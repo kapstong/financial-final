@@ -72,21 +72,26 @@ class TwoFactorAuth {
             }
 
             $code = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
-            // Store in session temporarily (expires in 2 minutes)
-            if (!isset($_SESSION)) {
-                session_start();
-            }
-            $_SESSION['email_2fa'] = $_SESSION['email_2fa'] ?? [];
-            $_SESSION['email_2fa'][$userId] = [
-                'code' => $code,
-                'expires' => time() + 120
-            ];
 
+            // Persist code in sms_codes table (reuse for email codes) with 2 minute expiry
+            $insert = $this->db->prepare("INSERT INTO sms_codes (user_id, phone_number, code, expires_at, created_at)
+                VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL 2 MINUTE), NOW())
+                ON DUPLICATE KEY UPDATE code = ?, expires_at = DATE_ADD(NOW(), INTERVAL 2 MINUTE)");
+            $insert->execute([$userId, $user['email'], $code, $code]);
+
+            // Send email
             $mailer = Mailer::getInstance();
             $sent = $mailer->sendVerificationCode($user['email'], $code, $user['first_name'] ?? '');
             if ($sent) {
+                Logger::getInstance()->info("Email 2FA code sent to {$user['email']} for user {$userId}");
                 return ['success' => true, 'message' => 'Email code sent'];
             }
+
+            // If mail failed, remove the DB entry so codes can't be used
+            $del = $this->db->prepare("DELETE FROM sms_codes WHERE user_id = ? AND phone_number = ? AND code = ?");
+            $del->execute([$userId, $user['email'], $code]);
+
+            Logger::getInstance()->error('Failed to send email 2FA code: ' . $mailer->getLastError());
             return ['success' => false, 'error' => 'Failed to send email code: ' . $mailer->getLastError()];
 
         } catch (Exception $e) {
@@ -99,22 +104,32 @@ class TwoFactorAuth {
      * Verify email-based 2FA code (session-backed)
      */
     private function verifyEmailCode($userId, $code) {
-        if (!isset($_SESSION)) {
-            session_start();
-        }
-        $entry = $_SESSION['email_2fa'][$userId] ?? null;
-        if (!$entry) {
+        try {
+            $stmt = $this->db->prepare("SELECT id FROM sms_codes WHERE user_id = ? AND phone_number = ? AND code = ? AND expires_at > NOW() LIMIT 1");
+            // phone_number stores email for email codes
+            $stmt->execute([$userId, $this->getUserEmailById($userId), $code]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($row) {
+                // consume code
+                $del = $this->db->prepare("DELETE FROM sms_codes WHERE id = ?");
+                $del->execute([$row['id']]);
+                return true;
+            }
+            return false;
+        } catch (Exception $e) {
             return false;
         }
-        if (time() > ($entry['expires'] ?? 0)) {
-            unset($_SESSION['email_2fa'][$userId]);
-            return false;
+    }
+
+    private function getUserEmailById($userId) {
+        try {
+            $stmt = $this->db->prepare("SELECT email FROM users WHERE id = ? LIMIT 1");
+            $stmt->execute([$userId]);
+            $r = $stmt->fetch(PDO::FETCH_ASSOC);
+            return $r['email'] ?? null;
+        } catch (Exception $e) {
+            return null;
         }
-        if (hash_equals((string)$entry['code'], (string)$code)) {
-            unset($_SESSION['email_2fa'][$userId]);
-            return true;
-        }
-        return false;
     }
 
     /**
