@@ -899,7 +899,7 @@ if ($budgetRequestedByName === '') {
             </li>
             <li class="nav-item" role="presentation">
                 <button class="nav-link" id="reports-tab" data-bs-toggle="tab" data-bs-target="#reports" type="button" role="tab">
-                    <i class="fas fa-chart-bar me-2"></i>Reports & Analytics
+                    <i class="fas fa-chart-bar me-2"></i>Reports
                 </button>
             </li>
 
@@ -1353,7 +1353,7 @@ if ($budgetRequestedByName === '') {
             <!-- Reports & Analytics Tab -->
             <div class="tab-pane fade" id="reports" role="tabpanel" aria-labelledby="reports-tab">
                 <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h6 class="mb-0">Budget Reports & Analytics</h6>
+                    <h6 class="mb-0">Budget Reports</h6>
                     <button class="btn btn-outline-secondary" id="exportReportsBtn"><i class="fas fa-download me-2"></i>Export Current Report</button>
                 </div>
                 <div class="row">
@@ -3950,6 +3950,475 @@ if ($budgetRequestedByName === '') {
             </div>
         </div>
     </div>
+
+    <script src="../includes/financial_hq_state.js"></script>
+    <script>
+        let currentBudgetAuditRows = [];
+
+        function budgetMergeRecords(primary, secondary) {
+            const map = new Map();
+            (secondary || []).forEach(item => map.set(String(item.id), item));
+            (primary || []).forEach(item => map.set(String(item.id), item));
+            return Array.from(map.values());
+        }
+
+        async function budgetFetchJson(url, options) {
+            try {
+                const response = await fetch(url, options);
+                const payload = await response.json();
+                return response.ok ? payload : { error: payload.error || `HTTP ${response.status}` };
+            } catch (error) {
+                return { error: error.message };
+            }
+        }
+
+        function closeBudgetModal(id) {
+            const modalEl = document.getElementById(id);
+            if (!modalEl) {
+                return;
+            }
+            bootstrap.Modal.getInstance(modalEl)?.hide();
+        }
+
+        function getSeedClaimsBreakdown() {
+            const claims = (window.FinancialHQState?.getHrClaims?.() || []).map(item => ({
+                id: item.claim_id || item.id,
+                employee_name: item.employee_name,
+                department: item.department,
+                amount: Number(item.amount || 0),
+                status: String(item.status || 'approved').toLowerCase(),
+                date_submitted: item.submitted_at ? item.submitted_at.slice(0, 10) : '2026-05-01'
+            }));
+            const departmentBreakdown = {};
+            claims.forEach(claim => {
+                if (!departmentBreakdown[claim.department]) {
+                    departmentBreakdown[claim.department] = { total_amount: 0, claim_count: 0 };
+                }
+                departmentBreakdown[claim.department].total_amount += claim.amount;
+                departmentBreakdown[claim.department].claim_count += 1;
+            });
+            return { claims, summary: { department_breakdown: departmentBreakdown } };
+        }
+
+        loadBudgets = async function() {
+            const payload = await budgetFetchJson('../api/budgets.php?source=all');
+            currentBudgets = budgetMergeRecords(Array.isArray(payload?.budgets) ? payload.budgets : [], window.FinancialHQState?.getBudgetPlans?.() || []);
+            renderBudgetsTable();
+            populateBudgetDropdowns(currentBudgets);
+            updateBudgetOverview();
+        };
+
+        loadAllocations = async function() {
+            const payload = await budgetFetchJson('../api/budgets.php?action=allocations&include_external=1');
+            currentAllocations = budgetMergeRecords(Array.isArray(payload?.allocations) ? payload.allocations : [], window.FinancialHQState?.getBudgetAllocations?.() || []);
+            renderAllocationsTable();
+            updateAllocationSummary();
+            renderClaimsSummary();
+            renderClaimsOverBudget();
+            updateBudgetOverview();
+        };
+
+        loadTrackingData = async function() {
+            const trackingPeriodSelect = document.querySelector('#tracking select');
+            const period = trackingPeriodSelect ? trackingPeriodSelect.value : 'year_to_date';
+            const payload = await budgetFetchJson(`../api/budgets.php?action=tracking&period=${encodeURIComponent(period)}`);
+            currentTrackingData = budgetMergeRecords(Array.isArray(payload?.tracking) ? payload.tracking : [], window.FinancialHQState?.getBudgetTracking?.() || []);
+            renderTrackingTable();
+            updateTrackingCards(payload?.summary || window.FinancialHQState?.getBudgetSummary?.() || null);
+        };
+
+        loadAdjustments = async function() {
+            const payload = await budgetFetchJson('../api/budgets.php?action=adjustments');
+            currentAdjustments = budgetMergeRecords(Array.isArray(payload?.adjustments) ? payload.adjustments : [], window.FinancialHQState?.getBudgetAdjustments?.() || []);
+            renderAdjustmentsTable();
+        };
+
+        loadAlerts = async function() {
+            const payload = await budgetFetchJson('../api/budgets.php?action=alerts');
+            currentAlerts = budgetMergeRecords(Array.isArray(payload?.alerts) ? payload.alerts : [], window.FinancialHQState?.getBudgetAlerts?.() || []);
+            renderAlertsTable();
+            updateAlertsCards();
+            updateBudgetOverview();
+            showThresholdToast();
+        };
+
+        loadClaimsData = async function() {
+            try {
+                const response = await fetch('../api/integrations.php?action=execute&integration_name=hr3&action_name=getClaimsBreakdown');
+                const payload = await response.json();
+                const result = payload.result || payload.data || payload;
+                if (response.ok && payload.success && result && result.summary) {
+                    currentHr3ClaimsBreakdown = result.data || result;
+                } else {
+                    currentHr3ClaimsBreakdown = getSeedClaimsBreakdown();
+                }
+            } catch (error) {
+                currentHr3ClaimsBreakdown = getSeedClaimsBreakdown();
+            }
+            renderClaimsSummary();
+            renderClaimsOverBudget();
+        };
+
+        createBudget = async function(formData) {
+            const payload = await budgetFetchJson('../api/budgets.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(formData)
+            });
+
+            if (payload.error) {
+                window.FinancialHQState?.createBudget?.({
+                    ...formData,
+                    created_by_name: 'Finance Team',
+                    status: 'draft'
+                });
+                showAlert('Budget saved to fallback planning workspace.', 'warning');
+            } else {
+                showAlert('Budget created successfully', 'success');
+            }
+
+            loadBudgets();
+            loadAllocations();
+            loadTrackingData();
+            loadAlerts();
+            loadAuditTrail();
+            closeBudgetModal('createBudgetModal');
+        };
+
+        createBudgetItem = async function(formData) {
+            const payload = await budgetFetchJson('../api/budgets.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(formData)
+            });
+
+            if (payload.error) {
+                const department = (window.currentDepartments || []).find(item => String(item.id) === String(formData.department_id));
+                window.FinancialHQState?.addBudgetAllocation?.({
+                    budget_id: formData.budget_id,
+                    department_id: formData.department_id,
+                    department: department?.dept_name || `Department ${formData.department_id}`,
+                    category: `Category ${formData.category_id || 'General'}`,
+                    total_amount: Number(formData.budgeted_amount || 0),
+                    reserved_amount: 0,
+                    utilized_amount: 0
+                });
+                showAlert('Allocation saved to fallback budget workspace.', 'warning');
+            } else {
+                showAlert('Allocation saved', 'success');
+            }
+
+            loadBudgets();
+            loadAllocations();
+            loadTrackingData();
+            loadAlerts();
+            loadAuditTrail();
+            closeBudgetModal('allocateFundsModal');
+        };
+
+        requestAdjustment = async function(formData) {
+            const payload = await budgetFetchJson('../api/budgets.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(formData)
+            });
+
+            if (payload.error) {
+                const department = (window.currentDepartments || []).find(item => String(item.id) === String(formData.department_id));
+                window.FinancialHQState?.addBudgetAdjustment?.({
+                    ...formData,
+                    department_name: department?.dept_name || `Department ${formData.department_id}`,
+                    requested_by_name: 'Finance Team',
+                    status: 'pending'
+                });
+                showAlert('Adjustment request queued in the fallback budget workspace.', 'warning');
+            } else {
+                showAlert('Adjustment request submitted', 'success');
+            }
+
+            loadAdjustments();
+            loadAllocations();
+            loadBudgets();
+            loadTrackingData();
+            loadAlerts();
+            loadAuditTrail();
+            closeBudgetModal('adjustmentRequestModal');
+        };
+
+        updateBudget = async function(budgetId, formData) {
+            const seedBudget = currentBudgets.find(item => String(item.id) === String(budgetId) && item.source === 'seed');
+            if (seedBudget) {
+                window.FinancialHQState?.updateBudget?.(budgetId, formData);
+                showAlert('Budget updated successfully', 'success');
+            } else {
+                const payload = await budgetFetchJson(`../api/budgets.php?id=${encodeURIComponent(budgetId)}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(formData)
+                });
+                if (payload.error) {
+                    showAlert('Error updating budget: ' + payload.error, 'danger');
+                    return;
+                }
+                showAlert('Budget updated successfully', 'success');
+            }
+
+            loadBudgets();
+            loadAllocations();
+            loadTrackingData();
+            loadAlerts();
+            loadAuditTrail();
+            closeBudgetModal('editBudgetModal');
+        };
+
+        updateAdjustmentStatus = async function(adjustmentId, status) {
+            const seedAdjustment = currentAdjustments.find(item => String(item.id) === String(adjustmentId) && item.source === 'seed');
+            if (seedAdjustment) {
+                window.FinancialHQState?.updateBudgetAdjustmentStatus?.(adjustmentId, status);
+                showAlert(`Adjustment ${status}`, 'success');
+            } else {
+                const payload = await budgetFetchJson('../api/budgets.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'adjustment_status', adjustment_id: adjustmentId, status })
+                });
+                if (payload.error) {
+                    showAlert('Error updating adjustment: ' + payload.error, 'danger');
+                    return;
+                }
+                showAlert(`Adjustment ${status}`, 'success');
+            }
+
+            loadAdjustments();
+            loadAllocations();
+            loadBudgets();
+            loadTrackingData();
+            loadAlerts();
+            loadAuditTrail();
+        };
+
+        updateAdjustment = async function(adjustmentId, formData) {
+            const seedAdjustment = currentAdjustments.find(item => String(item.id) === String(adjustmentId) && item.source === 'seed');
+            if (seedAdjustment) {
+                const department = (window.currentDepartments || []).find(item => String(item.id) === String(formData.department_id));
+                window.FinancialHQState?.updateBudgetAdjustment?.(adjustmentId, {
+                    ...formData,
+                    department_name: department?.dept_name || seedAdjustment.department_name
+                });
+                showAlert('Adjustment updated successfully', 'success');
+            } else {
+                const payload = await budgetFetchJson(`../api/budgets.php?id=${encodeURIComponent(adjustmentId)}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'adjustment_update', ...formData })
+                });
+                if (payload.error) {
+                    showAlert('Error updating adjustment: ' + payload.error, 'danger');
+                    return;
+                }
+                showAlert('Adjustment updated successfully', 'success');
+            }
+
+            loadAdjustments();
+            loadAllocations();
+            loadBudgets();
+            loadTrackingData();
+            loadAlerts();
+            loadAuditTrail();
+            closeBudgetModal('adjustmentRequestModal');
+        };
+
+        deleteAdjustment = async function(adjustmentId) {
+            showConfirmDialog(
+                'Delete Adjustment',
+                'Are you sure you want to delete this adjustment? This action cannot be undone.',
+                async () => {
+                    const seedAdjustment = currentAdjustments.find(item => String(item.id) === String(adjustmentId) && item.source === 'seed');
+                    if (seedAdjustment) {
+                        window.FinancialHQState?.deleteBudgetAdjustment?.(adjustmentId);
+                        showAlert('Adjustment deleted successfully', 'success');
+                    } else {
+                        const payload = await budgetFetchJson(`../api/budgets.php?action=adjustment&id=${encodeURIComponent(adjustmentId)}`, {
+                            method: 'DELETE'
+                        });
+                        if (payload.error) {
+                            showAlert('Error deleting adjustment: ' + payload.error, 'danger');
+                            return;
+                        }
+                        showAlert('Adjustment deleted successfully', 'success');
+                    }
+                    loadAdjustments();
+                    loadAllocations();
+                    loadBudgets();
+                    loadTrackingData();
+                    loadAlerts();
+                    loadAuditTrail();
+                }
+            );
+        };
+
+        function renderBudgetAuditRows(rows) {
+            const tbody = document.getElementById('auditTrailBody');
+            if (!tbody) {
+                return;
+            }
+            currentBudgetAuditRows = Array.isArray(rows) ? rows : [];
+            if (!currentBudgetAuditRows.length) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No audit records available.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = currentBudgetAuditRows.map(log => {
+                const newValues = parseAuditValues(log.new_values);
+                const oldValues = parseAuditValues(log.old_values);
+                const targetLabel = formatAuditTarget(log, newValues, oldValues);
+                const details = formatAuditDetails(log, targetLabel, newValues);
+                const source = formatAuditSource(log, newValues, oldValues);
+                const timestamp = log.formatted_date || new Date(log.created_at).toLocaleString();
+                const user = log.full_name || log.username || 'Unknown';
+                return `
+                    <tr>
+                        <td>${timestamp}</td>
+                        <td>${user}</td>
+                        <td>${log.action || 'N/A'}</td>
+                        <td>${targetLabel}</td>
+                        <td>${details}</td>
+                        <td>${source}</td>
+                        <td>${log.ip_address || 'N/A'}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function getFilteredBudgetAuditRows() {
+            const dateFrom = document.getElementById('budgetAuditDateFrom')?.value || '';
+            const dateTo = document.getElementById('budgetAuditDateTo')?.value || '';
+            const user = (document.getElementById('budgetAuditUser')?.value || '').toLowerCase();
+            const action = (document.getElementById('budgetAuditAction')?.value || '').toLowerCase();
+            const target = (document.getElementById('budgetAuditTarget')?.value || '').toLowerCase();
+
+            return currentBudgetAuditRows.filter(log => {
+                const createdAt = String(log.created_at || '');
+                const userValue = String(log.full_name || log.username || '').toLowerCase();
+                const actionValue = String(log.action || '').toLowerCase();
+                const targetValue = String(log.action_description || log.table_name || '').toLowerCase();
+                if (dateFrom && createdAt.slice(0, 10) < dateFrom) return false;
+                if (dateTo && createdAt.slice(0, 10) > dateTo) return false;
+                if (user && !userValue.includes(user)) return false;
+                if (action && !actionValue.includes(action)) return false;
+                if (target && !targetValue.includes(target)) return false;
+                return true;
+            });
+        }
+
+        loadAuditTrail = async function() {
+            const tables = ['budgets', 'budget_items', 'budget_adjustments', 'budget_categories', 'hr3_integrations'];
+            const payload = await budgetFetchJson(`../api/audit.php?table_name=${encodeURIComponent(tables.join(','))}`);
+            renderBudgetAuditRows(Array.isArray(payload) ? payload : []);
+        };
+
+        function exportBudgetAuditRows() {
+            const rows = getFilteredBudgetAuditRows();
+            if (!rows.length) {
+                showAlert('No audit rows available for export.', 'warning');
+                return;
+            }
+            const csv = [
+                ['Date/Time', 'User', 'Action', 'Budget/Item', 'Details', 'Source', 'IP Address'].join(','),
+                ...rows.map(log => {
+                    const newValues = parseAuditValues(log.new_values);
+                    const oldValues = parseAuditValues(log.old_values);
+                    return [
+                        log.formatted_date || new Date(log.created_at).toLocaleString(),
+                        log.full_name || log.username || 'Unknown',
+                        log.action || '',
+                        formatAuditTarget(log, newValues, oldValues),
+                        formatAuditDetails(log, formatAuditTarget(log, newValues, oldValues), newValues),
+                        formatAuditSource(log, newValues, oldValues),
+                        log.ip_address || ''
+                    ].map(value => `"${String(value ?? '').replace(/"/g, '""')}"`).join(',');
+                })
+            ].join('\n');
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `budget_audit_${new Date().toISOString().slice(0, 10)}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const auditCardBody = document.querySelector('#audit .card-body');
+            if (auditCardBody && !document.getElementById('budgetAuditFilters')) {
+                const filterBar = document.createElement('div');
+                filterBar.id = 'budgetAuditFilters';
+                filterBar.className = 'row g-2 align-items-end mb-3';
+                filterBar.innerHTML = `
+                    <div class="col-md-2">
+                        <label class="form-label">Date From</label>
+                        <input type="date" class="form-control" id="budgetAuditDateFrom">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Date To</label>
+                        <input type="date" class="form-control" id="budgetAuditDateTo">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">User</label>
+                        <input type="text" class="form-control" id="budgetAuditUser" placeholder="Search user">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Action</label>
+                        <input type="text" class="form-control" id="budgetAuditAction" placeholder="Search action">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Target</label>
+                        <input type="text" class="form-control" id="budgetAuditTarget" placeholder="Budget or item">
+                    </div>
+                    <div class="col-md-2">
+                        <button type="button" class="btn btn-primary w-100 mb-2" id="budgetAuditApplyBtn">Apply</button>
+                        <button type="button" class="btn btn-outline-secondary w-100" id="budgetAuditResetBtn">Reset</button>
+                    </div>
+                `;
+                auditCardBody.insertBefore(filterBar, auditCardBody.firstChild);
+            }
+
+            const auditHeader = document.querySelector('#audit .d-flex.justify-content-between.align-items-center.mb-3');
+            if (auditHeader && !document.getElementById('budgetAuditExportBtn')) {
+                const exportBtn = document.createElement('button');
+                exportBtn.type = 'button';
+                exportBtn.className = 'btn btn-outline-secondary';
+                exportBtn.id = 'budgetAuditExportBtn';
+                exportBtn.innerHTML = '<i class="fas fa-download me-2"></i>Export Filtered Logs';
+                exportBtn.addEventListener('click', exportBudgetAuditRows);
+                auditHeader.appendChild(exportBtn);
+            }
+
+            document.getElementById('budgetAuditApplyBtn')?.addEventListener('click', function() {
+                renderBudgetAuditRows(getFilteredBudgetAuditRows());
+            });
+            document.getElementById('budgetAuditResetBtn')?.addEventListener('click', function() {
+                ['budgetAuditDateFrom', 'budgetAuditDateTo', 'budgetAuditUser', 'budgetAuditAction', 'budgetAuditTarget'].forEach(id => {
+                    const field = document.getElementById(id);
+                    if (field) field.value = '';
+                });
+                renderBudgetAuditRows(currentBudgetAuditRows);
+            });
+            ['budgetAuditDateFrom', 'budgetAuditDateTo', 'budgetAuditUser', 'budgetAuditAction', 'budgetAuditTarget'].forEach(id => {
+                document.getElementById(id)?.addEventListener('input', function() {
+                    renderBudgetAuditRows(getFilteredBudgetAuditRows());
+                });
+            });
+
+            const auditTableWrapper = document.querySelector('#audit .table-responsive');
+            if (auditTableWrapper) {
+                auditTableWrapper.style.maxHeight = '460px';
+                auditTableWrapper.style.overflowY = 'auto';
+            }
+        });
+    </script>
 
     <!-- Privacy Mode - Hide amounts with asterisks + Eye button -->
     <script src="../includes/privacy_mode.js?v=12"></script>

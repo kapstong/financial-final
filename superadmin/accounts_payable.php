@@ -710,7 +710,9 @@ try {
                 <div class="card">
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <h5 class="mb-0">Bills / Payables Management</h5>
-                        <!-- Receive Bills button removed per request -->
+                        <button class="btn btn-outline-secondary btn-sm" onclick="exportReport('payables')">
+                            <i class="fas fa-download me-1"></i>Export Bills
+                        </button>
                     </div>
                     <div class="card-body">
                         <div class="row mb-3">
@@ -757,8 +759,11 @@ try {
             <!-- Aging Report Tab -->
             <div class="tab-pane fade" id="aging" role="tabpanel">
                 <div class="card">
-                    <div class="card-header">
+                    <div class="card-header d-flex justify-content-between align-items-center">
                         <h5 class="mb-0">Aging of Accounts Payable</h5>
+                        <button class="btn btn-outline-secondary btn-sm" onclick="exportReport('aging')">
+                            <i class="fas fa-download me-1"></i>Export Aging
+                        </button>
                     </div>
                     <div class="card-body">
                         <div class="row mb-3">
@@ -937,7 +942,7 @@ try {
             <div class="tab-pane fade" id="reports" role="tabpanel">
                 <div class="card">
                     <div class="card-header">
-                        <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Reports & Analytics</h5>
+                        <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Reports</h5>
                     </div>
                     <div class="card-body">
                         <div class="row">
@@ -985,40 +990,6 @@ try {
             </div>
         </div>
 
-        <!-- Integration & Security Info -->
-        <div class="row mt-4">
-            <div class="col-md-6">
-                <div class="card">
-                    <div class="card-header">
-                        <h6><i class="fas fa-link me-2"></i>Integration with GL & Other Modules</h6>
-                    </div>
-                    <div class="card-body">
-                        <ul class="list-unstyled">
-                            <li><i class="fas fa-check text-success me-2"></i>Every transaction posts to General Ledger</li>
-                            <li><i class="fas fa-check text-success me-2"></i>AP balance reflects in GL under Liabilities</li>
-                            <li><i class="fas fa-check text-success me-2"></i>Disbursements connect to Cash/Bank accounts</li>
-                            <li><i class="fas fa-check text-success me-2"></i>Refunds/collections flow into Cash inflows</li>
-                            <li><i class="fas fa-check text-success me-2"></i>Visible in Dashboard summaries & global reports</li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-6">
-                <div class="card">
-                    <div class="card-header">
-                        <h6><i class="fas fa-shield-alt me-2"></i>Security & Audit Trail</h6>
-                    </div>
-                    <div class="card-body">
-                        <ul class="list-unstyled">
-                            <li><i class="fas fa-lock text-primary me-2"></i>Tracks who created bills, approved payments</li>
-                            <li><i class="fas fa-lock text-primary me-2"></i>Logs refunds and adjustments</li>
-                            <li><i class="fas fa-lock text-primary me-2"></i>Ensures accountability and prevents fraud</li>
-                            <li><i class="fas fa-lock text-primary me-2"></i>Complete audit trail for compliance</li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-        </div>
     </div>
 
     <!-- Footer -->
@@ -2875,6 +2846,277 @@ try {
                 }
             }, 5000);
         }
+    </script>
+    <script src="../includes/financial_hq_state.js"></script>
+    <script>
+        let apAllBills = [];
+        let apVisibleBills = [];
+        let apMergedPayments = [];
+        let apMergedAdjustments = [];
+        const originalDeleteBillFn = typeof deleteBill === 'function' ? deleteBill : null;
+        const originalDeletePaymentFn = typeof deletePayment === 'function' ? deletePayment : null;
+        const originalDeleteAdjustmentFn = typeof deleteAdjustment === 'function' ? deleteAdjustment : null;
+
+        function mergeRecords(primary, secondary) {
+            const map = new Map();
+            (secondary || []).forEach(item => map.set(String(item.id), item));
+            (primary || []).forEach(item => map.set(String(item.id), item));
+            return Array.from(map.values());
+        }
+
+        async function fetchJsonSafe(url) {
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+                return Array.isArray(data) ? data : (data?.data || data?.result || []);
+            } catch (error) {
+                return [];
+            }
+        }
+
+        loadVendors = async function() {
+            const apiVendors = await fetchJsonSafe(`${apiBase}vendors.php`);
+            const merged = mergeRecords(apiVendors, window.FinancialHQState?.getVendors?.() || []);
+            populateVendorDropdowns(merged);
+        };
+
+        renderBillsTable = function(bills) {
+            const tbody = document.querySelector('#billsTable tbody');
+            apVisibleBills = Array.isArray(bills) ? bills : [];
+            tbody.innerHTML = '';
+
+            if (!apVisibleBills.length) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No bills found</td></tr>';
+                return;
+            }
+
+            apVisibleBills.forEach(bill => {
+                const status = (bill.status || 'draft').toLowerCase();
+                const statusColor = {
+                    draft: 'secondary',
+                    approved: 'warning',
+                    paid: 'success',
+                    overdue: 'danger',
+                    rejected: 'dark'
+                }[status] || 'secondary';
+                const workflow = (bill.workflow_state || '').toLowerCase();
+                const canProcess = bill.source === 'seed' && bill.record_mode === 'process' && workflow === 'pending_approval';
+                const actions = canProcess
+                    ? `
+                        <button class="btn btn-sm btn-success" onclick="processSeedBill(${bill.id}, 'approve')" title="Approve">
+                            <i class="fas fa-check"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="processSeedBill(${bill.id}, 'reject')" title="Reject">
+                            <i class="fas fa-times"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-info" onclick="viewBill(${bill.id})" title="View Details">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    `
+                    : `
+                        <button class="btn btn-sm btn-outline-info" onclick="viewBill(${bill.id})" title="View Details">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                        ${bill.source === 'seed' ? '' : `
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteBill(${bill.id})" title="Delete">
+                            <i class="fas fa-trash"></i>
+                        </button>`}
+                    `;
+
+                tbody.innerHTML += `
+                    <tr>
+                        <td>${bill.bill_number || bill.id}</td>
+                        <td>${bill.vendor_name || 'Unknown Vendor'}</td>
+                        <td>${bill.bill_date ? new Date(bill.bill_date).toLocaleDateString() : 'N/A'}</td>
+                        <td>PHP ${Number(bill.amount || bill.total_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        <td>${bill.due_date ? new Date(bill.due_date).toLocaleDateString() : 'N/A'}</td>
+                        <td><span class="badge bg-${statusColor}">${status.charAt(0).toUpperCase() + status.slice(1)}</span></td>
+                        <td class="d-flex gap-2">${actions}</td>
+                    </tr>
+                `;
+            });
+        };
+
+        loadBills = async function() {
+            const apiBills = await fetchJsonSafe(`${apiBase}bills.php`);
+            apAllBills = mergeRecords(apiBills, window.FinancialHQState?.getBills?.() || []);
+            renderBillsTable(apAllBills);
+            collectiblesData = apAllBills.slice();
+            updateCollectiblesSummary(collectiblesData);
+            renderCollectiblesTable(collectiblesData);
+        };
+
+        filterBills = function() {
+            const status = document.getElementById('billStatusFilter')?.value || '';
+            const dateFrom = document.getElementById('billDateFrom')?.value || '';
+            const dateTo = document.getElementById('billDateTo')?.value || '';
+            const filtered = apAllBills.filter(bill => {
+                const billStatus = (bill.status || '').toLowerCase();
+                const matchesStatus = !status
+                    || (status === 'unpaid' && ['draft', 'approved', 'overdue'].includes(billStatus))
+                    || billStatus === status;
+                if (!matchesStatus) return false;
+                if (dateFrom && bill.bill_date && bill.bill_date < dateFrom) return false;
+                if (dateTo && bill.bill_date && bill.bill_date > dateTo) return false;
+                return true;
+            });
+            renderBillsTable(filtered);
+        };
+
+        generateAgingReport = async function() {
+            const combinedAging = window.FinancialHQState?.getPayablesAging?.() || [];
+            renderAgingReport(combinedAging);
+        };
+
+        loadPayments = async function() {
+            const apiPayments = await fetchJsonSafe(`${apiBase}payments.php?type=made`);
+            apMergedPayments = mergeRecords(apiPayments.filter(payment => !payment.reference_number || !payment.reference_number.startsWith('COLL-')), window.FinancialHQState?.getPaymentsMade?.() || []);
+            renderPaymentsTable(apMergedPayments);
+        };
+
+        renderPaymentsTable = function(payments) {
+            const tbody = document.querySelector('#paymentsTable tbody');
+            tbody.innerHTML = '';
+
+            if (!payments || !payments.length) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No payments recorded</td></tr>';
+                return;
+            }
+
+            payments.forEach(payment => {
+                const actions = payment.source === 'seed'
+                    ? `<button class="btn btn-sm btn-outline-info" onclick="viewPayment(${payment.id})" title="View Details"><i class="fas fa-eye"></i></button>`
+                    : `
+                        <button class="btn btn-sm btn-outline-info" onclick="viewPayment(${payment.id})" title="View Details"><i class="fas fa-eye"></i></button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deletePayment(${payment.id})" title="Delete"><i class="fas fa-trash"></i></button>
+                    `;
+                tbody.innerHTML += `
+                    <tr>
+                        <td>${payment.payment_number || payment.reference_number}</td>
+                        <td>${payment.vendor_name || 'Unknown Vendor'}</td>
+                        <td>PHP ${Number(payment.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        <td><span class="badge bg-info">${(payment.payment_method || 'unknown').replace('_', ' ').toUpperCase()}</span></td>
+                        <td>${payment.payment_date ? new Date(payment.payment_date).toLocaleDateString() : 'N/A'}</td>
+                        <td>${payment.reference_number || 'N/A'}</td>
+                        <td class="d-flex gap-2">${actions}</td>
+                    </tr>
+                `;
+            });
+        };
+
+        loadAdjustments = async function() {
+            const apiAdjustments = await fetchJsonSafe(`${apiBase}adjustments.php?type=payable`);
+            apMergedAdjustments = mergeRecords(apiAdjustments, window.FinancialHQState?.getAdjustments?.('payable') || []);
+            renderAdjustmentsTable(apMergedAdjustments);
+        };
+
+        renderAdjustmentsTable = function(adjustments) {
+            const tbody = document.querySelector('#adjustmentsTable tbody');
+            tbody.innerHTML = '';
+
+            if (!adjustments || !adjustments.length) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No adjustments recorded</td></tr>';
+                return;
+            }
+
+            adjustments.forEach(adjustment => {
+                const badgeColor = {
+                    credit_memo: 'success',
+                    debit_memo: 'warning',
+                    discount: 'info',
+                    write_off: 'danger'
+                }[(adjustment.adjustment_type || '').toLowerCase()] || 'secondary';
+
+                const actions = adjustment.source === 'seed'
+                    ? `<button class="btn btn-sm btn-outline-info" onclick="viewAdjustment(${adjustment.id})" title="View Details"><i class="fas fa-eye"></i></button>`
+                    : `
+                        <button class="btn btn-sm btn-outline-info" onclick="viewAdjustment(${adjustment.id})" title="View Details"><i class="fas fa-eye"></i></button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteAdjustment(${adjustment.id})" title="Delete"><i class="fas fa-trash"></i></button>
+                    `;
+
+                tbody.innerHTML += `
+                    <tr>
+                        <td>${adjustment.adjustment_number}</td>
+                        <td>${adjustment.vendor_name || 'Unknown Vendor'}</td>
+                        <td><span class="badge bg-${badgeColor}">${(adjustment.adjustment_type || '').replace('_', ' ').toUpperCase()}</span></td>
+                        <td>PHP ${Number(adjustment.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        <td>${adjustment.adjustment_date ? new Date(adjustment.adjustment_date).toLocaleDateString() : 'N/A'}</td>
+                        <td>${adjustment.reason || 'N/A'}</td>
+                        <td class="d-flex gap-2">${actions}</td>
+                    </tr>
+                `;
+            });
+        };
+
+        loadCollectibles = async function() {
+            collectiblesData = apAllBills.length ? apAllBills.slice() : (window.FinancialHQState?.getBills?.() || []);
+            updateCollectiblesSummary(collectiblesData);
+            renderCollectiblesTable(collectiblesData);
+        };
+
+        processSeedBill = function(billId, decision) {
+            window.FinancialHQState?.updateBillWorkflow?.(billId, decision);
+            showAlert(`Bill ${decision === 'approve' ? 'approved' : 'rejected'} successfully`, 'success');
+            loadBills();
+        };
+
+        deleteBill = async function(billId) {
+            const seedBill = apAllBills.find(item => String(item.id) === String(billId) && item.source === 'seed');
+            if (seedBill) {
+                showAlert('This record is retained as part of the historical vendor ledger.', 'warning');
+                return;
+            }
+            if (originalDeleteBillFn) {
+                return originalDeleteBillFn(billId);
+            }
+        };
+
+        deletePayment = async function(paymentId) {
+            const seedPayment = apMergedPayments.find(item => String(item.id) === String(paymentId) && item.source === 'seed');
+            if (seedPayment) {
+                showAlert('This payment record is preserved for audit history.', 'warning');
+                return;
+            }
+            if (originalDeletePaymentFn) {
+                return originalDeletePaymentFn(paymentId);
+            }
+        };
+
+        deleteAdjustment = async function(adjustmentId) {
+            const seedAdjustment = apMergedAdjustments.find(item => String(item.id) === String(adjustmentId) && item.source === 'seed');
+            if (seedAdjustment) {
+                showAlert('This adjustment record is preserved for reporting continuity.', 'warning');
+                return;
+            }
+            if (originalDeleteAdjustmentFn) {
+                return originalDeleteAdjustmentFn(adjustmentId);
+            }
+        };
+
+        exportReport = async function(type) {
+            let rows = [];
+            let headers = [];
+            const filename = `${type}_report_${new Date().toISOString().slice(0, 10)}.csv`;
+
+            if (type === 'payables') {
+                headers = ['Bill Number', 'Vendor', 'Bill Date', 'Due Date', 'Amount', 'Balance', 'Status'];
+                rows = apVisibleBills.map(item => [item.bill_number, item.vendor_name, item.bill_date, item.due_date, item.amount || item.total_amount, item.balance || item.amount || item.total_amount, item.status]);
+            } else if (type === 'payments') {
+                headers = ['Payment Number', 'Vendor', 'Amount', 'Payment Method', 'Payment Date', 'Reference'];
+                rows = apMergedPayments.map(item => [item.payment_number || item.reference_number, item.vendor_name, item.amount, item.payment_method, item.payment_date, item.reference_number || '']);
+            } else {
+                headers = ['Bill Number', 'Vendor', 'Bill Date', 'Due Date', 'Balance', 'Days Past Due', 'Aging Bucket', 'Status'];
+                rows = (window.FinancialHQState?.getPayablesAging?.() || []).map(item => [item.bill_number, item.vendor_name, item.bill_date, item.due_date, item.balance || item.amount || item.total_amount, item.days_past_due, item.aging_bucket, item.status]);
+            }
+
+            let csv = headers.join(',') + '\n';
+            rows.forEach(row => {
+                csv += row.map(field => `"${String(field ?? '').replace(/"/g, '""')}"`).join(',') + '\n';
+            });
+
+            downloadCSV(csv, filename);
+            showAlert(`Report exported successfully (${rows.length} records)`, 'success');
+        };
     </script>
 
     <!-- Privacy Mode - Hide amounts with asterisks + Eye button -->

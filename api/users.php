@@ -39,21 +39,10 @@ require_once '../includes/database.php';
 }
 require_once '../includes/logger.php';
 
-// Start session safely
+$method = $_SERVER['REQUEST_METHOD'];
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
-$auth = new Auth();
-ensure_api_auth($method, [
-    'GET' => 'users.view',
-    'PUT' => 'users.edit',
-    'DELETE' => 'users.delete',
-    'POST' => 'users.create',
-    'PATCH' => 'users.edit',
-]);
-
 }
-
-$method = $_SERVER['REQUEST_METHOD'];
 if (!isset($_SESSION['user'])) {
     http_response_code(401);
     echo json_encode(['error' => 'Unauthorized - Session not found']);
@@ -62,6 +51,14 @@ if (!isset($_SESSION['user'])) {
 }
 
 $auth = new Auth();
+$auth = new Auth();
+ensure_api_auth($method, [
+    'GET' => 'users.view',
+    'PUT' => 'users.edit',
+    'DELETE' => 'users.delete',
+    'POST' => 'users.create',
+    'PATCH' => 'users.edit',
+]);
 $permissionMap = [
     'GET' => 'users.view',
     'POST' => 'users.create',

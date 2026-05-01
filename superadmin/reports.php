@@ -2445,6 +2445,680 @@ require_once '../includes/database.php';
         });
     </script>
 
+    <script src="../includes/financial_hq_state.js"></script>
+    <script>
+        (function() {
+            const reportStyle = document.createElement('style');
+            reportStyle.textContent = `
+                .statement-shell { display: grid; gap: 1rem; }
+                .statement-metrics { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+                .statement-metric-card { background: #f8fafc; border: 1px solid #d7dee7; border-radius: 12px; padding: 1rem; }
+                .statement-metric-card span { display: block; color: #5c6773; font-size: 0.9rem; }
+                .statement-metric-card strong { display: block; font-size: 1.25rem; color: #1e2936; margin-top: 0.35rem; }
+                .statement-section-card { border: 1px solid #d7dee7; border-radius: 12px; overflow: hidden; background: #fff; }
+                .statement-section-card .card-header { background: #eef3f8; border-bottom: 1px solid #d7dee7; padding: 0.85rem 1rem; font-weight: 600; }
+                .statement-breakdown { border-top: 1px solid #e8edf2; padding: 0.85rem 1rem; }
+                .statement-breakdown summary { cursor: pointer; color: #1e2936; font-weight: 600; }
+                .statement-table { margin: 0; }
+                .statement-table th, .statement-table td { vertical-align: middle; }
+                .statement-total-row td { font-weight: 700; background: #f4f7fb; }
+            `;
+            document.head.appendChild(reportStyle);
+
+            function statementEscape(value) {
+                return String(value ?? '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;');
+            }
+
+            function statementMoney(value) {
+                return 'PHP ' + Number(value || 0).toLocaleString('en-US', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                });
+            }
+
+            function appendReportPeriodOptions(selectId) {
+                const select = document.getElementById(selectId);
+                if (!select) {
+                    return;
+                }
+                const additions = [
+                    ['month_to_date', 'Month-to-Date'],
+                    ['year_to_date', 'Year-to-Date'],
+                    ['biweekly', 'Bi-Weekly'],
+                    ['last_90_days', 'Last 90 Days']
+                ];
+                additions.forEach(([value, label]) => {
+                    if (!select.querySelector(`option[value="${value}"]`)) {
+                        const option = document.createElement('option');
+                        option.value = value;
+                        option.textContent = label;
+                        select.insertBefore(option, select.querySelector('option[value="custom"]'));
+                    }
+                });
+            }
+
+            function groupRows(items, keyGetter, amountGetter, mapFn) {
+                const grouped = new Map();
+                (items || []).forEach(item => {
+                    const key = keyGetter(item);
+                    const amount = Number(amountGetter(item) || 0);
+                    if (!grouped.has(key)) {
+                        grouped.set(key, { key, amount: 0, rows: [] });
+                    }
+                    grouped.get(key).amount += amount;
+                    grouped.get(key).rows.push(item);
+                });
+                return Array.from(grouped.values()).map(group => mapFn(group)).filter(row => Number(row.amount || 0) !== 0);
+            }
+
+            function withinDateRange(value, from, to) {
+                const dateOnly = String(value || '').slice(0, 10);
+                return (!from || dateOnly >= from) && (!to || dateOnly <= to);
+            }
+
+            window.getDateRange = function(period) {
+                const now = new Date();
+                let from;
+                let to;
+                function startOfWeek(date) {
+                    const next = new Date(date);
+                    const day = next.getDay();
+                    const diff = day === 0 ? -6 : 1 - day;
+                    next.setDate(next.getDate() + diff);
+                    next.setHours(0, 0, 0, 0);
+                    return next;
+                }
+
+                switch (period) {
+                    case 'daily':
+                        from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                        to = new Date(from);
+                        break;
+                    case 'weekly':
+                        from = startOfWeek(now);
+                        to = new Date(from);
+                        to.setDate(from.getDate() + 6);
+                        break;
+                    case 'biweekly':
+                        to = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                        from = new Date(to);
+                        from.setDate(to.getDate() - 13);
+                        break;
+                    case 'monthly':
+                    case 'month_to_date':
+                        from = new Date(now.getFullYear(), now.getMonth(), 1);
+                        to = period === 'month_to_date' ? new Date(now) : new Date(now.getFullYear(), now.getMonth() + 1, 0);
+                        break;
+                    case 'quarterly':
+                        const quarterStartMonth = Math.floor(now.getMonth() / 3) * 3;
+                        from = new Date(now.getFullYear(), quarterStartMonth, 1);
+                        to = new Date(now.getFullYear(), quarterStartMonth + 3, 0);
+                        break;
+                    case 'semi_annually':
+                        if (now.getMonth() < 6) {
+                            from = new Date(now.getFullYear(), 0, 1);
+                            to = new Date(now.getFullYear(), 6, 0);
+                        } else {
+                            from = new Date(now.getFullYear(), 6, 1);
+                            to = new Date(now.getFullYear(), 12, 0);
+                        }
+                        break;
+                    case 'annually':
+                    case 'year_to_date':
+                        from = new Date(now.getFullYear(), 0, 1);
+                        to = period === 'year_to_date' ? new Date(now) : new Date(now.getFullYear(), 11, 31);
+                        break;
+                    case 'last_90_days':
+                        to = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                        from = new Date(to);
+                        from.setDate(to.getDate() - 89);
+                        break;
+                    default:
+                        from = new Date(now.getFullYear(), now.getMonth(), 1);
+                        to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+                }
+
+                return {
+                    from: from.toISOString().slice(0, 10),
+                    to: to.toISOString().slice(0, 10)
+                };
+            };
+
+            function buildFallbackIncomeStatement(dateFrom, dateTo) {
+                const invoices = (window.FinancialHQState?.getInvoices?.() || []).filter(item => withinDateRange(item.invoice_date, dateFrom, dateTo));
+                const bills = (window.FinancialHQState?.getBills?.() || []).filter(item => withinDateRange(item.bill_date, dateFrom, dateTo));
+                const disbursements = (window.FinancialHQState?.getDisbursements?.() || []).filter(item => withinDateRange(item.disbursement_date, dateFrom, dateTo));
+
+                const revenueRows = groupRows(
+                    invoices,
+                    item => item.customer_name || item.customer_code || item.invoice_number,
+                    item => item.total_amount,
+                    group => ({
+                        account_name: group.key,
+                        amount: group.amount,
+                        source: 'Accounts Receivable invoices'
+                    })
+                );
+
+                const cogsRows = groupRows(
+                    bills.filter(item => /(food|supply|inventory|ingredients)/i.test(item.vendor_name || '')),
+                    item => item.vendor_name || item.bill_number,
+                    item => item.amount || item.total_amount,
+                    group => ({
+                        account_name: group.key,
+                        amount: group.amount,
+                        source: 'Accounts Payable bills'
+                    })
+                );
+
+                const operatingExpenseRows = groupRows(
+                    bills.filter(item => !/(food|supply|inventory|ingredients)/i.test(item.vendor_name || '')).concat(disbursements),
+                    item => item.vendor_name || item.payee || item.disbursement_number || 'Expense',
+                    item => item.amount || item.total_amount,
+                    group => ({
+                        account_name: group.key,
+                        amount: group.amount,
+                        source: 'Disbursements and operating payables'
+                    })
+                );
+
+                const totalRevenue = revenueRows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+                const totalCogs = cogsRows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+                const totalExpenses = operatingExpenseRows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+                const grossProfit = totalRevenue - totalCogs;
+                const netProfit = grossProfit - totalExpenses;
+
+                return {
+                    report_type: 'Income Statement',
+                    source: 'fallback',
+                    date_from: dateFrom,
+                    date_to: dateTo,
+                    generated_at: new Date().toISOString(),
+                    revenue: { accounts: revenueRows, total: totalRevenue },
+                    cogs: { accounts: cogsRows, total: totalCogs },
+                    expenses: { accounts: operatingExpenseRows, total: totalExpenses },
+                    gross_profit: grossProfit,
+                    net_profit: netProfit
+                };
+            }
+
+            function buildFallbackBalanceSheet(asOfDate) {
+                const invoices = (window.FinancialHQState?.getInvoices?.() || []).filter(item => String(item.invoice_date || '') <= asOfDate);
+                const bills = (window.FinancialHQState?.getBills?.() || []).filter(item => String(item.bill_date || '') <= asOfDate);
+                const received = (window.FinancialHQState?.getPaymentsReceived?.() || []).filter(item => String(item.payment_date || '') <= asOfDate);
+                const made = (window.FinancialHQState?.getPaymentsMade?.() || []).filter(item => String(item.payment_date || '') <= asOfDate);
+                const disbursements = (window.FinancialHQState?.getDisbursements?.() || []).filter(item => String(item.disbursement_date || '') <= asOfDate);
+                const payrollPending = (window.FinancialHQState?.getHrPayroll?.() || []).filter(item => String(item.status || '').toLowerCase() === 'pending');
+
+                const cashBalance = received.reduce((sum, row) => sum + Number(row.amount || 0), 0)
+                    - made.reduce((sum, row) => sum + Number(row.amount || 0), 0)
+                    - disbursements.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+                const receivablesBalance = invoices.reduce((sum, row) => sum + Number(row.balance ?? row.total_amount ?? 0), 0);
+                const payableBalance = bills.reduce((sum, row) => sum + Number(row.balance ?? row.amount ?? row.total_amount ?? 0), 0);
+                const payrollLiability = payrollPending.reduce((sum, row) => sum + Number(row.total_amount || 0), 0);
+                const retainedEarnings = buildFallbackIncomeStatement('2026-01-01', asOfDate).net_profit;
+
+                const assetsAccounts = [
+                    { account_name: 'Cash Position', account_balance: cashBalance, source: 'Collections less disbursements' },
+                    { account_name: 'Outstanding Receivables', account_balance: receivablesBalance, source: 'Customer invoice balances' }
+                ];
+                const liabilitiesAccounts = [
+                    { account_name: 'Accounts Payable', account_balance: payableBalance, source: 'Open vendor bills' },
+                    { account_name: 'Pending Payroll', account_balance: payrollLiability, source: 'Payroll approvals pending release' }
+                ];
+                const totalAssets = assetsAccounts.reduce((sum, row) => sum + Number(row.account_balance || 0), 0);
+                const totalLiabilities = liabilitiesAccounts.reduce((sum, row) => sum + Number(row.account_balance || 0), 0);
+                const equityPlug = totalAssets - totalLiabilities;
+                const equityAccounts = [
+                    { account_name: 'Retained Earnings', account_balance: retainedEarnings, source: 'Year-to-date net profit' },
+                    { account_name: 'Operational Equity Reserve', account_balance: equityPlug - retainedEarnings, source: 'Balancing equity position' }
+                ];
+                const totalEquity = equityAccounts.reduce((sum, row) => sum + Number(row.account_balance || 0), 0);
+
+                return {
+                    report_type: 'Balance Sheet',
+                    source: 'fallback',
+                    date_from: '2026-01-01',
+                    date_to: asOfDate,
+                    as_of_date: asOfDate,
+                    generated_at: new Date().toISOString(),
+                    assets: { accounts: assetsAccounts, total: totalAssets },
+                    liabilities: { accounts: liabilitiesAccounts, total: totalLiabilities },
+                    equity: { accounts: equityAccounts, retained_earnings: retainedEarnings, total: totalEquity },
+                    total_liabilities_equity: totalLiabilities + totalEquity
+                };
+            }
+
+            function buildFallbackCashFlow(dateFrom, dateTo) {
+                const collections = (window.FinancialHQState?.getPaymentsReceived?.() || []).filter(item => withinDateRange(item.payment_date, dateFrom, dateTo));
+                const paymentsMade = (window.FinancialHQState?.getPaymentsMade?.() || []).filter(item => withinDateRange(item.payment_date, dateFrom, dateTo));
+                const disbursements = (window.FinancialHQState?.getDisbursements?.() || []).filter(item => withinDateRange(item.disbursement_date, dateFrom, dateTo));
+
+                const revenueRows = groupRows(
+                    collections,
+                    item => item.customer_name || item.invoice_number || item.payment_number,
+                    item => item.amount,
+                    group => ({ name: group.key, amount: group.amount, source: 'Collections' })
+                );
+
+                const expenseRows = groupRows(
+                    paymentsMade.concat(disbursements),
+                    item => item.vendor_name || item.payee || item.payment_number || item.disbursement_number,
+                    item => item.amount,
+                    group => ({
+                        name: group.key,
+                        subcategory: group.key,
+                        amount: group.amount,
+                        sources: 'Finance'
+                    })
+                );
+
+                const expenseDetails = expenseRows.map(row => ({
+                    department: row.name,
+                    expense_category: row.subcategory,
+                    source_system: 'FINANCE',
+                    amount: row.amount,
+                    transaction_count: 1
+                }));
+
+                const totalRevenue = revenueRows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+                const totalExpenses = expenseRows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+                const operatingAmount = totalRevenue - totalExpenses;
+
+                return {
+                    report_type: 'Cash Flow Statement',
+                    source: 'fallback',
+                    start_date: dateFrom,
+                    end_date: dateTo,
+                    date_from: dateFrom,
+                    date_to: dateTo,
+                    generated_at: new Date().toISOString(),
+                    operating_activities: {
+                        revenue: revenueRows,
+                        total_revenue: totalRevenue,
+                        expenses_by_category: expenseRows,
+                        expense_details: expenseDetails,
+                        total_expenses: totalExpenses,
+                        amount: operatingAmount
+                    },
+                    investing_activities: {
+                        accounts: [{ account_name: 'Capital Equipment Activity', amount: 0 }],
+                        amount: 0
+                    },
+                    financing_activities: {
+                        accounts: [{ account_name: 'Working Capital Movement', amount: 0 }],
+                        amount: 0
+                    },
+                    cash_flow: {
+                        operating_activities: {
+                            revenue: revenueRows,
+                            total_revenue: totalRevenue,
+                            expenses_by_category: expenseRows,
+                            expense_details: expenseDetails,
+                            total_expenses: totalExpenses,
+                            amount: operatingAmount
+                        },
+                        investing_activities: { accounts: [{ account_name: 'Capital Equipment Activity', amount: 0 }], amount: 0 },
+                        financing_activities: { accounts: [{ account_name: 'Working Capital Movement', amount: 0 }], amount: 0 },
+                        net_change: operatingAmount
+                    },
+                    net_cash_flow: operatingAmount
+                };
+            }
+
+            function buildSummaryCards(items) {
+                return `
+                    <div class="statement-metrics">
+                        ${items.map(item => `
+                            <div class="statement-metric-card">
+                                <span>${statementEscape(item.label)}</span>
+                                <strong>${statementEscape(item.value)}</strong>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+
+            function buildBreakdownTable(title, rows, totalLabel, totalValue, valueKey) {
+                const amountField = valueKey || 'amount';
+                return `
+                    <div class="statement-section-card">
+                        <div class="card-header">${statementEscape(title)}</div>
+                        <div class="table-responsive">
+                            <table class="table table-striped statement-table">
+                                <thead>
+                                    <tr>
+                                        <th>Source</th>
+                                        <th class="text-end">Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${rows.length ? rows.map(row => `
+                                        <tr>
+                                            <td>${statementEscape(row.account_name || row.name || row.department || 'N/A')}</td>
+                                            <td class="text-end">${statementMoney(row[amountField] || row.account_balance || 0)}</td>
+                                        </tr>
+                                    `).join('') : '<tr><td colspan="2" class="text-center text-muted">No data in this section.</td></tr>'}
+                                    <tr class="statement-total-row">
+                                        <td>${statementEscape(totalLabel)}</td>
+                                        <td class="text-end">${statementMoney(totalValue || 0)}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                `;
+            }
+
+            window.renderIncomeStatement = function(data) {
+                const container = document.getElementById('incomeStatementContainer');
+                if (!container) {
+                    return;
+                }
+                const revenueRows = data.revenue?.accounts || [];
+                const cogsRows = data.cogs?.accounts || [];
+                const expenseRows = data.expenses?.accounts || [];
+                const grossProfit = data.gross_profit ?? ((data.revenue?.total || 0) - (data.cogs?.total || 0));
+                container.innerHTML = `
+                    <div class="statement-header">
+                        <h1 class="statement-title">Profit & Loss Statement</h1>
+                        <p class="statement-period">For the period ${formatDate(data.date_from)} to ${formatDate(data.date_to)}</p>
+                    </div>
+                    <div class="statement-shell">
+                        ${buildSummaryCards([
+                            { label: 'Total Revenue', value: statementMoney(data.revenue?.total || 0) },
+                            { label: 'Total COGS', value: statementMoney(data.cogs?.total || 0) },
+                            { label: 'Gross Profit', value: statementMoney(grossProfit) },
+                            { label: 'Operating Expenses', value: statementMoney(data.expenses?.total || 0) },
+                            { label: 'Net Profit', value: statementMoney(data.net_profit || 0) }
+                        ])}
+                        ${buildBreakdownTable('Revenue Breakdown', revenueRows, 'Total Revenue', data.revenue?.total || 0, 'amount')}
+                        <details class="statement-breakdown"><summary>Total Revenue sources</summary>${buildBreakdownTable('Total Revenue Sources', revenueRows, 'Total Revenue', data.revenue?.total || 0, 'amount')}</details>
+                        ${buildBreakdownTable('Cost of Goods Sold', cogsRows, 'Total COGS', data.cogs?.total || 0, 'amount')}
+                        <details class="statement-breakdown"><summary>Total COGS sources</summary>${buildBreakdownTable('COGS Sources', cogsRows, 'Total COGS', data.cogs?.total || 0, 'amount')}</details>
+                        ${buildBreakdownTable('Operating Expenses', expenseRows, 'Total Operating Expenses', data.expenses?.total || 0, 'amount')}
+                        <details class="statement-breakdown"><summary>Operating expense sources</summary>${buildBreakdownTable('Operating Expense Sources', expenseRows, 'Total Operating Expenses', data.expenses?.total || 0, 'amount')}</details>
+                        <details class="statement-breakdown"><summary>Gross Profit and Net Profit drivers</summary>
+                            <div class="statement-section-card">
+                                <div class="card-header">Profit Bridge</div>
+                                <div class="table-responsive">
+                                    <table class="table table-striped statement-table">
+                                        <tbody>
+                                            <tr><td>Total Revenue</td><td class="text-end">${statementMoney(data.revenue?.total || 0)}</td></tr>
+                                            <tr><td>Less: Total COGS</td><td class="text-end">${statementMoney(data.cogs?.total || 0)}</td></tr>
+                                            <tr class="statement-total-row"><td>Gross Profit</td><td class="text-end">${statementMoney(grossProfit)}</td></tr>
+                                            <tr><td>Less: Operating Expenses</td><td class="text-end">${statementMoney(data.expenses?.total || 0)}</td></tr>
+                                            <tr class="statement-total-row"><td>Net Profit</td><td class="text-end">${statementMoney(data.net_profit || 0)}</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </details>
+                    </div>
+                `;
+                setTimeout(function() {
+                    if (typeof PrivacyMode !== 'undefined') {
+                        PrivacyMode.hide();
+                    }
+                }, 10);
+            };
+
+            window.renderBalanceSheet = function(data) {
+                const container = document.getElementById('balanceSheetContainer');
+                if (!container) {
+                    return;
+                }
+                container.innerHTML = `
+                    <div class="statement-header">
+                        <h1 class="statement-title">Balance Sheet</h1>
+                        <p class="statement-period">As of ${formatDate(data.as_of_date)}</p>
+                    </div>
+                    <div class="statement-shell">
+                        ${buildSummaryCards([
+                            { label: 'Total Assets', value: statementMoney(data.assets?.total || 0) },
+                            { label: 'Total Liabilities', value: statementMoney(data.liabilities?.total || 0) },
+                            { label: 'Total Equity', value: statementMoney(data.equity?.total || 0) },
+                            { label: 'Liabilities + Equity', value: statementMoney(data.total_liabilities_equity || 0) }
+                        ])}
+                        ${buildBreakdownTable('Assets', data.assets?.accounts || [], 'Total Assets', data.assets?.total || 0, 'account_balance')}
+                        <details class="statement-breakdown"><summary>Asset source breakdown</summary>${buildBreakdownTable('Asset Sources', data.assets?.accounts || [], 'Total Assets', data.assets?.total || 0, 'account_balance')}</details>
+                        ${buildBreakdownTable('Liabilities', data.liabilities?.accounts || [], 'Total Liabilities', data.liabilities?.total || 0, 'account_balance')}
+                        <details class="statement-breakdown"><summary>Liability source breakdown</summary>${buildBreakdownTable('Liability Sources', data.liabilities?.accounts || [], 'Total Liabilities', data.liabilities?.total || 0, 'account_balance')}</details>
+                        ${buildBreakdownTable('Equity', data.equity?.accounts || [], 'Total Equity', data.equity?.total || 0, 'account_balance')}
+                        <details class="statement-breakdown"><summary>Equity source breakdown</summary>${buildBreakdownTable('Equity Sources', data.equity?.accounts || [], 'Total Equity', data.equity?.total || 0, 'account_balance')}</details>
+                    </div>
+                `;
+                setTimeout(function() {
+                    if (typeof PrivacyMode !== 'undefined') {
+                        PrivacyMode.hide();
+                    }
+                }, 10);
+            };
+
+            window.renderCashFlow = function(data) {
+                const container = document.getElementById('cashFlowContainer');
+                if (!container) {
+                    return;
+                }
+                const operating = data.operating_activities || {};
+                const investing = data.investing_activities || {};
+                const financing = data.financing_activities || {};
+                container.innerHTML = `
+                    <div class="statement-header">
+                        <h1 class="statement-title">Cash Flow Statement</h1>
+                        <p class="statement-period">For the period ${formatDate(data.start_date)} to ${formatDate(data.end_date)}</p>
+                    </div>
+                    <div class="statement-shell">
+                        ${buildSummaryCards([
+                            { label: 'Cash Inflows', value: statementMoney(operating.total_revenue || 0) },
+                            { label: 'Cash Outflows', value: statementMoney(operating.total_expenses || 0) },
+                            { label: 'Operating Cash Flow', value: statementMoney(operating.amount || 0) },
+                            { label: 'Net Cash Flow', value: statementMoney(data.net_cash_flow || 0) }
+                        ])}
+                        ${buildBreakdownTable('Operating Cash Inflows', operating.revenue || [], 'Total Cash Inflows', operating.total_revenue || 0, 'amount')}
+                        <details class="statement-breakdown"><summary>Inflows source breakdown</summary>${buildBreakdownTable('Inflows Source Breakdown', operating.revenue || [], 'Total Cash Inflows', operating.total_revenue || 0, 'amount')}</details>
+                        ${buildBreakdownTable('Operating Cash Outflows', operating.expenses_by_category || [], 'Total Cash Outflows', operating.total_expenses || 0, 'amount')}
+                        <details class="statement-breakdown"><summary>Outflows source breakdown</summary>${buildBreakdownTable('Outflows Source Breakdown', operating.expense_details || [], 'Total Cash Outflows', operating.total_expenses || 0, 'amount')}</details>
+                        ${buildBreakdownTable('Investing Activities', investing.accounts || [], 'Net Cash from Investing Activities', investing.amount || 0, 'amount')}
+                        ${buildBreakdownTable('Financing Activities', financing.accounts || [], 'Net Cash from Financing Activities', financing.amount || 0, 'amount')}
+                    </div>
+                `;
+                setTimeout(function() {
+                    if (typeof PrivacyMode !== 'undefined') {
+                        PrivacyMode.hide();
+                    }
+                }, 10);
+            };
+
+            function openReportPrintWindow(title, html) {
+                const printWindow = window.open('', '_blank', 'width=1100,height=800');
+                if (!printWindow) {
+                    showAlert('Unable to open print preview window.', 'warning');
+                    return;
+                }
+                printWindow.document.write(`
+                    <html>
+                    <head>
+                        <title>${statementEscape(title)}</title>
+                        <style>
+                            body { font-family: Arial, sans-serif; padding: 24px; color: #1e2936; }
+                            table { width: 100%; border-collapse: collapse; margin: 12px 0 18px; }
+                            th, td { border: 1px solid #d0d7de; padding: 8px 10px; text-align: left; }
+                            .statement-metrics { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px; }
+                            .statement-metric-card { border: 1px solid #d0d7de; padding: 12px; border-radius: 8px; }
+                            .card-header { font-weight: 700; margin-bottom: 8px; }
+                            details { margin-bottom: 12px; }
+                        </style>
+                    </head>
+                    <body>${html}</body>
+                    </html>
+                `);
+                printWindow.document.close();
+                printWindow.focus();
+                printWindow.print();
+            }
+
+            function downloadCsv(filename, headers, rows) {
+                const csv = [
+                    headers.join(','),
+                    ...rows.map(row => row.map(value => `"${String(value ?? '').replace(/"/g, '""')}"`).join(','))
+                ].join('\n');
+                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+            }
+
+            window.generateIncomeStatement = async function() {
+                const periodSelect = document.getElementById('incomePeriodSelect');
+                let dateFrom;
+                let dateTo;
+                if (periodSelect?.value === 'custom') {
+                    dateFrom = document.getElementById('incomeFromDate')?.value || '';
+                    dateTo = document.getElementById('incomeToDate')?.value || '';
+                } else {
+                    const range = getDateRange(periodSelect?.value || 'monthly');
+                    dateFrom = range.from;
+                    dateTo = range.to;
+                }
+
+                try {
+                    const response = await fetch(`../api/reports.php?type=income_statement&date_from=${dateFrom}&date_to=${dateTo}`);
+                    const data = await response.json();
+                    if (!response.ok || data.error) {
+                        throw new Error(data.error || 'Unable to generate income statement');
+                    }
+                    currentIncomeStatementData = {
+                        ...data,
+                        cogs: data.cogs || { accounts: [], total: 0 },
+                        gross_profit: data.gross_profit ?? ((data.revenue?.total || 0) - (data.cogs?.total || 0))
+                    };
+                } catch (error) {
+                    currentIncomeStatementData = buildFallbackIncomeStatement(dateFrom, dateTo);
+                }
+                renderIncomeStatement(currentIncomeStatementData);
+            };
+
+            window.generateBalanceSheet = async function() {
+                const periodSelect = document.getElementById('balanceDateSelect');
+                let asOfDate;
+                if (periodSelect?.value === 'custom') {
+                    asOfDate = document.getElementById('balanceToDate')?.value || document.getElementById('balanceFromDate')?.value || new Date().toISOString().slice(0, 10);
+                } else {
+                    asOfDate = getDateRange(periodSelect?.value || 'monthly').to;
+                }
+
+                try {
+                    const response = await fetch(`../api/reports.php?type=balance_sheet&as_of_date=${asOfDate}`);
+                    const data = await response.json();
+                    if (!response.ok || data.error) {
+                        throw new Error(data.error || 'Unable to generate balance sheet');
+                    }
+                    currentBalanceSheetData = data;
+                } catch (error) {
+                    currentBalanceSheetData = buildFallbackBalanceSheet(asOfDate);
+                }
+                renderBalanceSheet(currentBalanceSheetData);
+            };
+
+            window.generateCashFlow = async function() {
+                const periodSelect = document.getElementById('cashFlowPeriodSelect');
+                let dateFrom;
+                let dateTo;
+                if (periodSelect?.value === 'custom') {
+                    dateFrom = document.getElementById('cashFlowFromDate')?.value || '';
+                    dateTo = document.getElementById('cashFlowToDate')?.value || '';
+                } else {
+                    const range = getDateRange(periodSelect?.value || 'monthly');
+                    dateFrom = range.from;
+                    dateTo = range.to;
+                }
+
+                try {
+                    const response = await fetch(`../api/reports.php?type=cash_flow&date_from=${dateFrom}&date_to=${dateTo}`);
+                    const data = await response.json();
+                    if (!response.ok || data.error) {
+                        throw new Error(data.error || 'Unable to generate cash flow');
+                    }
+                    currentCashFlowData = data;
+                } catch (error) {
+                    currentCashFlowData = buildFallbackCashFlow(dateFrom, dateTo);
+                }
+                renderCashFlow(currentCashFlowData);
+            };
+
+            window.exportIncomeStatement = function(format) {
+                if (!currentIncomeStatementData) {
+                    showAlert('Generate the Profit & Loss statement first.', 'warning');
+                    return;
+                }
+                if (format === 'pdf') {
+                    openReportPrintWindow('Profit & Loss Statement', document.getElementById('incomeStatementContainer').innerHTML);
+                    return;
+                }
+                const rows = [
+                    ...(currentIncomeStatementData.revenue?.accounts || []).map(row => ['Revenue', row.account_name, Number(row.amount || 0).toFixed(2)]),
+                    ...(currentIncomeStatementData.cogs?.accounts || []).map(row => ['COGS', row.account_name, Number(row.amount || 0).toFixed(2)]),
+                    ...(currentIncomeStatementData.expenses?.accounts || []).map(row => ['Operating Expense', row.account_name, Number(row.amount || 0).toFixed(2)]),
+                    ['Summary', 'Gross Profit', Number(currentIncomeStatementData.gross_profit || 0).toFixed(2)],
+                    ['Summary', 'Net Profit', Number(currentIncomeStatementData.net_profit || 0).toFixed(2)]
+                ];
+                downloadCsv(`income_statement_${currentIncomeStatementData.date_from}_to_${currentIncomeStatementData.date_to}.csv`, ['Section', 'Source', 'Amount'], rows);
+            };
+
+            window.exportBalanceSheet = function(format) {
+                if (!currentBalanceSheetData) {
+                    showAlert('Generate the Balance Sheet first.', 'warning');
+                    return;
+                }
+                if (format === 'pdf') {
+                    openReportPrintWindow('Balance Sheet', document.getElementById('balanceSheetContainer').innerHTML);
+                    return;
+                }
+                const rows = [
+                    ...(currentBalanceSheetData.assets?.accounts || []).map(row => ['Asset', row.account_name, Number(row.account_balance || 0).toFixed(2)]),
+                    ...(currentBalanceSheetData.liabilities?.accounts || []).map(row => ['Liability', row.account_name, Number(row.account_balance || 0).toFixed(2)]),
+                    ...(currentBalanceSheetData.equity?.accounts || []).map(row => ['Equity', row.account_name, Number(row.account_balance || 0).toFixed(2)]),
+                    ['Summary', 'Total Liabilities + Equity', Number(currentBalanceSheetData.total_liabilities_equity || 0).toFixed(2)]
+                ];
+                downloadCsv(`balance_sheet_${currentBalanceSheetData.as_of_date}.csv`, ['Section', 'Source', 'Amount'], rows);
+            };
+
+            window.exportCashFlow = function(format) {
+                if (!currentCashFlowData) {
+                    showAlert('Generate the Cash Flow statement first.', 'warning');
+                    return;
+                }
+                if (format === 'pdf') {
+                    openReportPrintWindow('Cash Flow Statement', document.getElementById('cashFlowContainer').innerHTML);
+                    return;
+                }
+                const rows = [
+                    ...(currentCashFlowData.operating_activities?.revenue || []).map(row => ['Operating Inflow', row.name, Number(row.amount || 0).toFixed(2)]),
+                    ...(currentCashFlowData.operating_activities?.expenses_by_category || []).map(row => ['Operating Outflow', row.name, Number(row.amount || 0).toFixed(2)]),
+                    ...(currentCashFlowData.investing_activities?.accounts || []).map(row => ['Investing', row.account_name, Number(row.amount || 0).toFixed(2)]),
+                    ...(currentCashFlowData.financing_activities?.accounts || []).map(row => ['Financing', row.account_name, Number(row.amount || 0).toFixed(2)]),
+                    ['Summary', 'Net Cash Flow', Number(currentCashFlowData.net_cash_flow || 0).toFixed(2)]
+                ];
+                downloadCsv(`cash_flow_${currentCashFlowData.start_date}_to_${currentCashFlowData.end_date}.csv`, ['Section', 'Source', 'Amount'], rows);
+            };
+
+            document.addEventListener('DOMContentLoaded', function() {
+                ['incomePeriodSelect', 'balanceDateSelect', 'cashFlowPeriodSelect'].forEach(appendReportPeriodOptions);
+            });
+        })();
+    </script>
+
     <script src="../includes/privacy_mode.js?v=12"></script>
     <script src="../includes/inactivity_timeout.js?v=3"></script>
 <script src="../includes/navbar_datetime.js"></script>

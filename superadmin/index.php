@@ -853,16 +853,13 @@ body {
                                     </div>
                                 </div>
                                 <p class="mb-4" style="color: #6c757d; font-size: 1.1rem; line-height: 1.6;">
-                                    Your comprehensive financial management platform. Track income, monitor expenses,
-                                    make informed business decisions with real-time insights.
+                                    Forecasting now drives the dashboard view. Validate projected outflows, compare
+                                    them against the annual plan, and trace each driver back to its recorded source.
                                 </p>
                                 <div class="d-flex flex-wrap gap-3 justify-content-center justify-content-lg-start">
-                                    <button class="btn btn-primary btn-lg px-4" onclick="window.location.href='accounts_receivable.php'">
-                                        <i class="fas fa-plus me-2"></i>Add Invoice
-                                    </button>
-                                    <button class="btn btn-outline-success btn-lg px-4" onclick="showQuickActionsModal()">
-                                        <i class="fas fa-cog me-2"></i>Financial Setup
-                                    </button>
+                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2">
+                                        <i class="fas fa-crystal-ball me-2"></i>Forecasting is the active command view
+                                    </span>
                                 </div>
                             </div>
                             <div class="col-lg-4 text-center mt-4 mt-lg-0">
@@ -915,18 +912,13 @@ body {
                     <div class="card-header">
                         <ul class="nav nav-tabs card-header-tabs" id="dashboardTabs" role="tablist">
                             <li class="nav-item">
-                                <a class="nav-link active" id="overview-tab" data-bs-toggle="tab" href="#overview" role="tab" aria-controls="overview" aria-selected="true"><i class="fas fa-tachometer-alt me-1"></i>Overview</a>
+                                <a class="nav-link active" id="forecasting-tab" data-bs-toggle="tab" href="#forecasting" role="tab" aria-controls="forecasting" aria-selected="true"><i class="fas fa-crystal-ball me-1"></i>Forecasting</a>
                             </li>
-                            <li class="nav-item">
-                                <a class="nav-link" id="analytics-tab" data-bs-toggle="tab" href="#analytics" role="tab" aria-controls="analytics" aria-selected="false"><i class="fas fa-chart-line me-1"></i>Analytics</a>
-                            </li>
-
                         </ul>
                     </div>
                     <div class="card-body">
                         <div class="tab-content" id="dashboardTabsContent">
-                            <!-- Overview Tab -->
-                            <div class="tab-pane fade show active" id="overview" role="tabpanel" aria-labelledby="overview-tab" style="padding-bottom: 100px;">
+                            <div class="tab-pane fade show active" id="forecasting" role="tabpanel" aria-labelledby="forecasting-tab" style="padding-bottom: 100px;">
                                 <!-- Key Metrics Row -->
                                 <div class="row mb-4">
                                     <div class="col-lg-3 col-md-6 mb-3">
@@ -1105,30 +1097,57 @@ body {
                                             </div>
 
                             <!-- Forecasting (moved from Budget Management) -->
-                            <div class="row mt-4">
+                            <div class="row mt-4" data-dashboard-forecast-section="1">
                                 <div class="col-lg-6">
                                     <div class="card h-100">
                                         <div class="card-header d-flex align-items-center">
                                             <i class="fas fa-crystal-ball text-primary me-3 fa-lg"></i>
                                             <div>
                                                 <h6 class="mb-0">Forecasting</h6>
-                                                <small class="text-muted">Projected spend and variance based on historical cash flow</small>
+                                                <small class="text-muted">Projected outflows with traceable source lineage and exportable detail</small>
                                             </div>
                                         </div>
                                         <div class="card-body">
+                                            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                                                <div class="d-flex flex-wrap gap-2">
+                                                    <select class="form-select form-select-sm" id="forecastSourceFilter" style="width: 190px;">
+                                                        <option value="combined">All Cash Outflows</option>
+                                                        <option value="disbursements">Disbursements Only</option>
+                                                        <option value="payments_made">Payments Made Only</option>
+                                                    </select>
+                                                    <select class="form-select form-select-sm" id="forecastMonthsFilter" style="width: 150px;">
+                                                        <option value="24">24 Months</option>
+                                                        <option value="36">36 Months</option>
+                                                        <option value="48" selected>48 Months</option>
+                                                        <option value="60">60 Months</option>
+                                                    </select>
+                                                </div>
+                                                <div class="d-flex gap-2">
+                                                    <button id="refreshForecastBtn" class="btn btn-outline-secondary btn-sm"><i class="fas fa-rotate me-2"></i>Refresh Forecast</button>
+                                                    <button id="forecastExportBtn" class="btn btn-primary btn-sm"><i class="fas fa-download me-2"></i>Export Forecast</button>
+                                                </div>
+                                            </div>
                                             <div class="row mb-3">
-                                                <div class="col-6">
+                                                <div class="col-md-4 mb-3 mb-md-0">
                                                     <div class="card forecast-card">
                                                         <div class="card-body">
-                                                            <h6>Projected Year-End Spend</h6>
+                                                            <h6>Projected Year-End Outflow</h6>
                                                             <h3 id="projectedYearEnd">Loading...</h3>
                                                         </div>
                                                     </div>
                                                 </div>
-                                                <div class="col-6">
+                                                <div class="col-md-4 mb-3 mb-md-0">
                                                     <div class="card forecast-card">
                                                         <div class="card-body">
-                                                            <h6>Expected Variance</h6>
+                                                            <h6>Current Monthly Run Rate</h6>
+                                                            <h3 id="forecastRunRate">Loading...</h3>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div class="card forecast-card">
+                                                        <div class="card-body">
+                                                            <h6>Budget Variance</h6>
                                                             <h3 id="expectedVariance">Loading...</h3>
                                                         </div>
                                                     </div>
@@ -1137,8 +1156,25 @@ body {
                                             <div class="chart-container mb-3">
                                                 <canvas id="forecastChart"></canvas>
                                             </div>
-                                            <div>
-                                                <button id="refreshForecastBtn" class="btn btn-outline-secondary"><i class="fas fa-rotate me-2"></i>Refresh Forecast</button>
+                                            <div class="row g-3">
+                                                <div class="col-md-4">
+                                                    <div class="border rounded p-3 h-100">
+                                                        <small class="text-uppercase text-muted d-block mb-1">Coverage</small>
+                                                        <div class="fw-semibold" id="forecastCoverageSummary">Loading...</div>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div class="border rounded p-3 h-100">
+                                                        <small class="text-uppercase text-muted d-block mb-1">Lineage</small>
+                                                        <div class="fw-semibold" id="forecastLineageSummary">Loading...</div>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div class="border rounded p-3 h-100">
+                                                        <small class="text-uppercase text-muted d-block mb-1">Dominant Source</small>
+                                                        <div class="fw-semibold" id="forecastSourceSummary">Loading...</div>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -1155,8 +1191,17 @@ body {
                                         <div class="card-body">
                                             <div class="table-responsive">
                                                 <table class="table table-striped">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>Month</th>
+                                                            <th>Total</th>
+                                                            <th>Disbursements</th>
+                                                            <th>Payments Made</th>
+                                                            <th>Notes</th>
+                                                        </tr>
+                                                    </thead>
                                                     <tbody id="forecastDriversBody">
-                                                        <tr><td colspan="4" class="text-center text-muted">Loading forecast drivers...</td></tr>
+                                                        <tr><td colspan="5" class="text-center text-muted">Loading forecast drivers...</td></tr>
                                                     </tbody>
                                                 </table>
                                             </div>
@@ -1181,6 +1226,145 @@ body {
     <script src="../includes/alert-modal.js"></script>
     <script src="../includes/forecasting.js?v=2"></script>
     <script>
+        let dashboardForecastState = null;
+
+        function mergeDashboardSections() {
+            const forecastingPane = document.getElementById('forecasting');
+            const analyticsPane = document.getElementById('analytics');
+            if (!forecastingPane || !analyticsPane) {
+                return;
+            }
+
+            const forecastSection = analyticsPane.querySelector('[data-dashboard-forecast-section="1"]');
+            if (forecastSection) {
+                forecastingPane.insertBefore(forecastSection, forecastingPane.firstChild);
+            }
+
+            Array.from(analyticsPane.children).forEach(child => {
+                if (forecastSection && child === forecastSection) {
+                    return;
+                }
+                forecastingPane.appendChild(child);
+            });
+
+            analyticsPane.remove();
+        }
+
+        function formatForecastCurrency(value) {
+            return 'PHP ' + Math.round(Number(value || 0)).toLocaleString();
+        }
+
+        function getDashboardForecastParams() {
+            const params = new URLSearchParams();
+            params.append('action', 'forecast');
+            params.append('months', document.getElementById('forecastMonthsFilter')?.value || '48');
+            params.append('category', document.getElementById('forecastSourceFilter')?.value || 'combined');
+            return params;
+        }
+
+        function renderDashboardForecastTable(history, forecast, selectedCategory) {
+            const tbody = document.getElementById('forecastDriversBody');
+            if (!tbody) {
+                return;
+            }
+
+            const rows = [];
+            history.forEach(item => {
+                const monthLabel = new Date(item.date).toLocaleDateString(undefined, { year: 'numeric', month: 'short' });
+                const sourceBreakdown = item.source_breakdown || {};
+                rows.push(`
+                    <tr>
+                        <td>${monthLabel}</td>
+                        <td>${formatForecastCurrency(item.value)}</td>
+                        <td>${formatForecastCurrency(sourceBreakdown.disbursements)}</td>
+                        <td>${formatForecastCurrency(sourceBreakdown.payments_made)}</td>
+                        <td>Recorded historical outflow for ${selectedCategory.replace('_', ' ')}</td>
+                    </tr>
+                `);
+            });
+
+            forecast.forEach(item => {
+                const monthLabel = new Date(item.date).toLocaleDateString(undefined, { year: 'numeric', month: 'short' });
+                rows.push(`
+                    <tr class="table-warning">
+                        <td>${monthLabel}</td>
+                        <td>${formatForecastCurrency(item.value)}</td>
+                        <td>-</td>
+                        <td>-</td>
+                        <td>Projected continuation of the selected outflow pattern</td>
+                    </tr>
+                `);
+            });
+
+            tbody.innerHTML = rows.length
+                ? rows.join('')
+                : '<tr><td colspan="5" class="text-center text-muted">No forecast driver data available.</td></tr>';
+        }
+
+        function renderDashboardForecastSummary(data, tfres) {
+            const history = data.history || [];
+            const avgMonthly = data.summary?.average_monthly || 0;
+            const selectedCategory = data.summary?.selected_category || 'combined';
+            const now = new Date();
+            const monthsRemaining = 12 - (now.getMonth() + 1);
+            const ytd = history.reduce((sum, item) => {
+                const month = new Date(item.date);
+                if (month.getFullYear() === now.getFullYear() && month.getMonth() <= now.getMonth()) {
+                    return sum + Number(item.value || 0);
+                }
+                return sum;
+            }, 0);
+
+            const projectedYearEnd = Math.round(ytd + avgMonthly * Math.max(monthsRemaining, 0));
+            const variance = Math.round(projectedYearEnd - (typeof annualBudgetTotal !== 'undefined' ? annualBudgetTotal : 0));
+            const dominantDriver = (data.drivers || []).slice().sort((left, right) => (right.total || 0) - (left.total || 0))[0];
+
+            document.getElementById('projectedYearEnd').textContent = formatForecastCurrency(projectedYearEnd);
+            document.getElementById('forecastRunRate').textContent = formatForecastCurrency(avgMonthly);
+            document.getElementById('expectedVariance').textContent = `${variance >= 0 ? 'PHP ' : '-PHP '}${Math.abs(variance).toLocaleString()}`;
+            document.getElementById('forecastCoverageSummary').textContent = `${history.length} historical months | ${selectedCategory.replace('_', ' ')}`;
+            document.getElementById('forecastLineageSummary').textContent = `${(data.method || 'history_only').replace('_', ' ')} with ${(tfres.method || 'naive').replace('_', ' ')}`;
+            document.getElementById('forecastSourceSummary').textContent = dominantDriver
+                ? `${dominantDriver.label} (${Math.round(dominantDriver.share_percent || 0)}% share)`
+                : 'No dominant source';
+        }
+
+        function exportDashboardForecast() {
+            if (!dashboardForecastState) {
+                return;
+            }
+
+            const { data, tfres, params } = dashboardForecastState;
+            const rows = [];
+            (data.history || []).forEach(item => {
+                rows.push([
+                    item.date,
+                    'actual',
+                    item.value,
+                    item.source_breakdown?.disbursements || 0,
+                    item.source_breakdown?.payments_made || 0
+                ]);
+            });
+            (tfres.forecast || []).forEach(item => {
+                rows.push([item.date, 'forecast', item.value, '', '']);
+            });
+
+            let csv = 'Month,Series,Total,Disbursements,Payments Made\n';
+            rows.forEach(row => {
+                csv += row.map(field => `"${String(field)}"`).join(',') + '\n';
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.href = url;
+            link.download = `forecast_${params.get('category')}_${params.get('months')}m_${new Date().toISOString().slice(0, 10)}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
+
         async function loadDashboardForecast() {
             try {
                 const apiPath = '../api/budgets.php?action=forecast&months=48';
@@ -1271,6 +1455,7 @@ body {
 
         // Initialize sidebar state on page load
         document.addEventListener('DOMContentLoaded', function() {
+            mergeDashboardSections();
             const sidebar = document.getElementById('sidebar');
             const content = document.querySelector('.content');
             const arrow = document.getElementById('sidebarArrow');
@@ -1539,6 +1724,79 @@ body {
             window.location.href = 'api_clients.php';
         }
 
+    </script>
+    <script>
+        loadDashboardForecast = async function() {
+            mergeDashboardSections();
+
+            try {
+                const params = getDashboardForecastParams();
+                const resp = await fetch(`../api/budgets.php?${params.toString()}`);
+                const data = await resp.json();
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                const history = data.history || [];
+                let tfres = { forecast: [] };
+                if (window.forecasting && window.forecasting.tfForecast) {
+                    try { tfres = await window.forecasting.tfForecast(history, 12); } catch (e) { console.warn('TF forecast failed', e); }
+                }
+
+                dashboardForecastState = { data, tfres, params };
+                renderDashboardForecastSummary(data, tfres);
+                renderDashboardForecastTable(history, tfres.forecast || [], data.summary?.selected_category || 'combined');
+
+                const labels = [];
+                const histValues = [];
+                history.forEach(h => {
+                    labels.push(new Date(h.date).toLocaleDateString(undefined, { year: 'numeric', month: 'short' }));
+                    histValues.push(h.value || 0);
+                });
+                const forecastValues = [];
+                (tfres.forecast || []).forEach(f => {
+                    labels.push(new Date(f.date).toLocaleDateString(undefined, { year: 'numeric', month: 'short' }));
+                    forecastValues.push(f.value || 0);
+                });
+
+                const ctx = document.getElementById('forecastChart').getContext('2d');
+                if (window._forecastChart) window._forecastChart.destroy();
+                window._forecastChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            { label: 'History', data: histValues, borderColor: 'rgba(54,162,235,1)', backgroundColor: 'rgba(54,162,235,0.1)', tension: 0.3 },
+                            { label: 'Forecast', data: Array(history.length).fill(null).concat(forecastValues), borderColor: 'rgba(255,159,64,1)', backgroundColor: 'rgba(255,159,64,0.05)', tension: 0.3 }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    callback: value => 'PHP ' + Number(value).toLocaleString()
+                                }
+                            }
+                        }
+                    }
+                });
+            } catch (error) {
+                console.error('Failed to load forecast', error);
+                const body = document.getElementById('forecastDriversBody');
+                if (body) {
+                    body.innerHTML = `<tr><td colspan="5" class="text-center text-danger">${error.message}</td></tr>`;
+                }
+            }
+        };
+
+        document.addEventListener('DOMContentLoaded', function() {
+            mergeDashboardSections();
+            document.getElementById('forecastSourceFilter')?.addEventListener('change', loadDashboardForecast);
+            document.getElementById('forecastMonthsFilter')?.addEventListener('change', loadDashboardForecast);
+            document.getElementById('forecastExportBtn')?.addEventListener('click', exportDashboardForecast);
+        });
     </script>
 
     <!-- Privacy Mode - Hide amounts with asterisks + Eye button -->

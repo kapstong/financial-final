@@ -3,6 +3,7 @@ require_once __DIR__ . '/database.php';
 require_once __DIR__ . '/permissions.php';
 require_once __DIR__ . '/logger.php';
 require_once __DIR__ . '/csrf.php';
+require_once __DIR__ . '/maintenance_mode.php';
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
@@ -32,6 +33,10 @@ $isApiRequest = strpos($scriptPath, '/api/') !== false || strpos($scriptPath, '\
 $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 $isStateChanging = in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'], true);
 $isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
+
+if (!empty($_SESSION['user']['id'])) {
+    enforceMaintenanceModeForRequest();
+}
 
 // Enforce folder-level role boundaries for authenticated web requests.
 if (!$isApiRequest && !empty($_SESSION['user']['id'])) {

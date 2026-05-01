@@ -39,9 +39,18 @@ require_once '../includes/database.php';
 }
 require_once '../includes/logger.php';
 
-// Start session safely
+$method = $_SERVER['REQUEST_METHOD'];
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
+}
+
+if (!isset($_SESSION['user'])) {
+    http_response_code(401);
+    echo json_encode(['error' => 'Unauthorized - Session not found']);
+    ob_end_flush();
+    exit;
+}
+
 $auth = new Auth();
 ensure_api_auth($method, [
     'GET' => 'settings.edit',
@@ -50,27 +59,6 @@ ensure_api_auth($method, [
     'POST' => 'settings.edit',
     'PATCH' => 'settings.edit',
 ]);
-
-}
-
-$method = $_SERVER['REQUEST_METHOD'];
-if ($method !== 'GET') {
-    // Check if user is logged in and has admin privileges
-    if (!isset($_SESSION['user'])) {
-        http_response_code(401);
-        echo json_encode(['error' => 'Unauthorized - Session not found']);
-        ob_end_flush();
-        exit;
-    }
-
-    // Check if user has admin role or permission to manage trash
-    $auth = new Auth();
-    if (!$auth->hasRole('admin') && !$auth->hasRole('super_admin') && !$auth->hasPermission('settings.edit')) {
-        http_response_code(403);
-        echo json_encode(['error' => 'Forbidden - Insufficient privileges']);
-        exit;
-    }
-}
 
 $db = null;
 

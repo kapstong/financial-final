@@ -733,13 +733,13 @@ $departments = [
                         <div class="tab-content mt-3" id="settingsTabContent">
                             <div class="tab-pane fade show active" id="maintenance" role="tabpanel" aria-labelledby="maintenance-tab">
                                 <h6>Maintenance Mode</h6>
-                                <form>
+                                <form id="maintenanceModeForm">
                                     <div class="mb-3">
                                         <label for="maintenanceToggle" class="form-label">Enable Maintenance Mode</label>
                                         <div class="form-check form-switch">
                                             <input class="form-check-input" type="checkbox" id="maintenanceToggle">
                                             <label class="form-check-label" for="maintenanceToggle">
-                                                Toggle maintenance mode on/off (will be available soon)
+                                                Toggle maintenance mode on/off for non-superadmin users
                                             </label>
                                         </div>
                                     </div>
@@ -747,6 +747,7 @@ $departments = [
                                         <label for="maintenanceMessage" class="form-label">Maintenance Banner Message</label>
                                         <textarea class="form-control" id="maintenanceMessage" rows="3" placeholder="Enter message to display during maintenance"></textarea>
                                     </div>
+                                    <div id="maintenanceAlertContainer"></div>
                                     <button type="submit" class="btn btn-primary"><i class="fas fa-save me-2"></i>Save Changes</button>
                                 </form>
                             </div>
@@ -1441,6 +1442,35 @@ $departments = [
             );
         }
 
+        function showMaintenanceAlert(message, type) {
+            const alert = `
+                <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+                    ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            `;
+            document.getElementById('maintenanceAlertContainer').innerHTML = alert;
+            setTimeout(() => {
+                document.querySelector('#maintenanceAlertContainer .alert')?.remove();
+            }, 5000);
+        }
+
+        async function loadMaintenanceModeState() {
+            try {
+                const response = await fetch('../api/maintenance_mode.php');
+                const data = await response.json();
+                if (!data.success) {
+                    throw new Error(data.error || 'Failed to load maintenance mode state');
+                }
+
+                const state = data.state || {};
+                document.getElementById('maintenanceToggle').checked = !!state.enabled;
+                document.getElementById('maintenanceMessage').value = state.message || '';
+            } catch (error) {
+                showMaintenanceAlert('Failed to load maintenance mode state: ' + error.message, 'danger');
+            }
+        }
+
         // Trash Management Functions
         function showTrashAlert(message, type) {
             const alert = `
@@ -1704,6 +1734,43 @@ $departments = [
 
         // Initialize trash on page load when trash tab is active
         document.addEventListener('DOMContentLoaded', function() {
+            const maintenanceForm = document.getElementById('maintenanceModeForm');
+            maintenanceForm?.addEventListener('submit', async function(e) {
+                e.preventDefault();
+
+                const submitBtn = maintenanceForm.querySelector('button[type="submit"]');
+                const originalText = submitBtn.innerHTML;
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Saving...';
+
+                try {
+                    const response = await fetch('../api/maintenance_mode.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            enabled: document.getElementById('maintenanceToggle').checked,
+                            message: document.getElementById('maintenanceMessage').value
+                        })
+                    });
+
+                    const data = await response.json();
+                    if (!data.success) {
+                        throw new Error(data.error || 'Failed to save maintenance mode');
+                    }
+
+                    showMaintenanceAlert('Maintenance mode settings saved successfully', 'success');
+                } catch (error) {
+                    showMaintenanceAlert('Error saving maintenance mode: ' + error.message, 'danger');
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = originalText;
+                }
+            });
+
+            loadMaintenanceModeState();
+
             // Restore active tab
             const tabRestored = restoreActiveTab();
 

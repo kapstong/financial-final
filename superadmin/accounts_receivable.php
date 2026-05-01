@@ -2592,6 +2592,557 @@ try {
         }
     </script>
 
+    <script src="../includes/financial_hq_state.js"></script>
+    <script>
+        let arMergedCustomers = [];
+        let arMergedInvoices = [];
+        let arMergedPayments = [];
+        let arMergedAdjustments = [];
+        let arCurrentAging = [];
+
+        const originalViewInvoiceFn = typeof viewInvoice === 'function' ? viewInvoice : null;
+        const originalSendInvoiceFn = typeof sendInvoice === 'function' ? sendInvoice : null;
+        const originalDeleteInvoiceFn = typeof deleteInvoice === 'function' ? deleteInvoice : null;
+        const originalViewPaymentFn = typeof viewPayment === 'function' ? viewPayment : null;
+        const originalDeletePaymentFn = typeof deletePayment === 'function' ? deletePayment : null;
+        const originalViewAdjustmentFn = typeof viewAdjustment === 'function' ? viewAdjustment : null;
+        const originalDeleteAdjustmentFn = typeof deleteAdjustment === 'function' ? deleteAdjustment : null;
+
+        function arMergeRecords(primary, secondary) {
+            const map = new Map();
+            (secondary || []).forEach(item => map.set(String(item.id), item));
+            (primary || []).forEach(item => map.set(String(item.id), item));
+            return Array.from(map.values());
+        }
+
+        async function arFetchJsonSafe(url) {
+            try {
+                const response = await fetch(url);
+                const payload = await response.json();
+                if (Array.isArray(payload)) {
+                    return payload;
+                }
+                if (Array.isArray(payload?.data)) {
+                    return payload.data;
+                }
+                if (Array.isArray(payload?.result)) {
+                    return payload.result;
+                }
+                return [];
+            } catch (error) {
+                return [];
+            }
+        }
+
+        function arEscape(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function arFormatMoney(value) {
+            return 'PHP ' + Number(value || 0).toLocaleString('en-US', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+        }
+
+        function arCloseVisibleModals() {
+            document.querySelectorAll('.modal.show').forEach(modalEl => {
+                const modal = bootstrap.Modal.getInstance(modalEl);
+                if (modal) {
+                    modal.hide();
+                }
+            });
+        }
+
+        function arShowModal(title, bodyHtml, footerHtml) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'modal fade';
+            wrapper.innerHTML = `
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">${title}</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">${bodyHtml}</div>
+                        <div class="modal-footer">${footerHtml || '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>'}</div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(wrapper);
+            const modal = new bootstrap.Modal(wrapper);
+            modal.show();
+            wrapper.addEventListener('hidden.bs.modal', function() {
+                wrapper.remove();
+            });
+        }
+
+        function arUpdateCustomerDropdowns(customers) {
+            ['invoiceCustomer', 'paymentCustomer', 'adjustmentCustomer'].forEach(id => {
+                const select = document.getElementById(id);
+                if (!select) {
+                    return;
+                }
+                select.innerHTML = '<option value="">Select Customer</option>';
+                (customers || []).forEach(customer => {
+                    select.innerHTML += `<option value="${customer.id}">${arEscape(customer.company_name)}</option>`;
+                });
+            });
+        }
+
+        function arUpdateReportCards() {
+            const outstanding = arMergedInvoices.reduce((sum, invoice) => sum + Number(invoice.balance ?? invoice.total_amount ?? 0), 0);
+            const overdue = arMergedInvoices
+                .filter(invoice => ['overdue', 'partial'].includes(String(invoice.status || '').toLowerCase()))
+                .reduce((sum, invoice) => sum + Number(invoice.balance ?? 0), 0);
+            const thisMonthCollections = arMergedPayments
+                .filter(payment => String(payment.payment_date || '').startsWith('2026-05') || String(payment.payment_date || '').startsWith('2026-04'))
+                .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+
+            const totalCards = document.querySelectorAll('#reports .reports-card h3');
+            if (totalCards.length >= 3) {
+                totalCards[0].textContent = arFormatMoney(outstanding);
+                totalCards[1].textContent = arFormatMoney(overdue);
+                totalCards[2].textContent = arFormatMoney(thisMonthCollections);
+            }
+
+            const totalReceivablesEl = document.getElementById('totalReceivables');
+            const overdueAmountEl = document.getElementById('overdueAmount');
+            if (totalReceivablesEl) totalReceivablesEl.textContent = arFormatMoney(outstanding);
+            if (overdueAmountEl) overdueAmountEl.textContent = arFormatMoney(overdue);
+        }
+
+        function viewCustomerRecord(id) {
+            const customer = arMergedCustomers.find(item => String(item.id) === String(id));
+            if (!customer) {
+                showAlert('Customer record not found', 'warning');
+                return;
+            }
+            arShowModal(
+                `Customer Record - ${arEscape(customer.company_name)}`,
+                `
+                    <div class="row">
+                        <div class="col-md-6 mb-3"><strong>Customer Code:</strong><br>${arEscape(customer.customer_code || 'N/A')}</div>
+                        <div class="col-md-6 mb-3"><strong>Contact Person:</strong><br>${arEscape(customer.contact_person || 'N/A')}</div>
+                        <div class="col-md-6 mb-3"><strong>Email:</strong><br>${arEscape(customer.email || 'N/A')}</div>
+                        <div class="col-md-6 mb-3"><strong>Phone:</strong><br>${arEscape(customer.phone || 'N/A')}</div>
+                        <div class="col-md-6 mb-3"><strong>Credit Limit:</strong><br>${arFormatMoney(customer.credit_limit || 0)}</div>
+                        <div class="col-md-6 mb-3"><strong>Status:</strong><br>${arEscape(customer.status || 'N/A')}</div>
+                    </div>
+                `
+            );
+        }
+
+        loadCustomers = function() {
+            const tbody = document.querySelector('#customersTable tbody');
+            arMergedCustomers = arMergeRecords(Array.isArray(phpCustomers) ? phpCustomers : [], window.FinancialHQState?.getCustomers?.() || []);
+
+            if (!tbody) {
+                return;
+            }
+
+            if (!arMergedCustomers.length) {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No customer records available.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = arMergedCustomers.map(customer => {
+                const actions = customer.source === 'seed'
+                    ? `<button class="btn btn-sm btn-outline-primary" onclick="viewCustomerRecord('${customer.id}')"><i class="fas fa-eye"></i></button>`
+                    : `
+                        <button class="btn btn-sm btn-outline-primary me-1" onclick="editCustomer(${customer.id})"><i class="fas fa-edit"></i></button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteCustomer(${customer.id})"><i class="fas fa-trash"></i></button>
+                    `;
+
+                return `
+                    <tr>
+                        <td>${arEscape(customer.customer_code || '')}</td>
+                        <td>${arEscape(customer.company_name || '')}</td>
+                        <td>${arEscape(customer.contact_person || '')}</td>
+                        <td>${arEscape(customer.email || '')}</td>
+                        <td>${arEscape(customer.phone || '')}</td>
+                        <td>${arFormatMoney(customer.credit_limit || 0)}</td>
+                        <td><span class="badge bg-${customer.status === 'active' ? 'success' : 'secondary'}">${arEscape(customer.status || 'unknown')}</span></td>
+                        <td>${actions}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            arUpdateCustomerDropdowns(arMergedCustomers);
+        };
+
+        updateCustomerDropdowns = function(customers) {
+            arUpdateCustomerDropdowns(customers && customers.length ? customers : arMergedCustomers);
+        };
+
+        loadInvoices = async function() {
+            const tbody = document.querySelector('#invoicesTable tbody');
+            const apiInvoices = await arFetchJsonSafe('../api/invoices.php');
+            arMergedInvoices = arMergeRecords(apiInvoices, window.FinancialHQState?.getInvoices?.() || []);
+
+            if (!tbody) {
+                return;
+            }
+
+            if (!arMergedInvoices.length) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No invoices found.</td></tr>';
+                arUpdateReportCards();
+                return;
+            }
+
+            tbody.innerHTML = arMergedInvoices.map(invoice => {
+                const status = String(invoice.status || 'draft').toLowerCase();
+                const sendButton = invoice.source === 'seed' && invoice.record_mode !== 'process'
+                    ? ''
+                    : `<button class="btn btn-sm btn-outline-success me-1" onclick="sendInvoice('${invoice.id}')" title="Send Invoice"><i class="fas fa-paper-plane"></i></button>`;
+                const deleteButton = invoice.source === 'seed'
+                    ? ''
+                    : `<button class="btn btn-sm btn-outline-danger" onclick="deleteInvoice('${invoice.id}')" title="Delete Invoice"><i class="fas fa-trash"></i></button>`;
+
+                return `
+                    <tr>
+                        <td>${arEscape(invoice.invoice_number || invoice.id)}</td>
+                        <td>${arEscape(invoice.customer_name || 'Unknown')}</td>
+                        <td>${invoice.invoice_date ? new Date(invoice.invoice_date).toLocaleDateString() : 'N/A'}</td>
+                        <td>${invoice.due_date ? new Date(invoice.due_date).toLocaleDateString() : 'N/A'}</td>
+                        <td>${arFormatMoney(invoice.total_amount || 0)}</td>
+                        <td>
+                            <div class="status-indicator ${getStatusDotClass(status)}">
+                                <span class="status-dot"></span>
+                                <span class="badge bg-${getStatusClass(status)}">${arEscape(status)}</span>
+                            </div>
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary me-1" onclick="viewInvoice('${invoice.id}')" title="View Invoice"><i class="fas fa-eye"></i></button>
+                            ${sendButton}
+                            ${deleteButton}
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            arUpdateReportCards();
+        };
+
+        viewInvoice = async function(id) {
+            const seedInvoice = arMergedInvoices.find(item => String(item.id) === String(id) && item.source === 'seed');
+            if (!seedInvoice) {
+                if (originalViewInvoiceFn) {
+                    return originalViewInvoiceFn(id);
+                }
+                return;
+            }
+
+            const canSend = seedInvoice.record_mode === 'process' && !['sent', 'paid'].includes(String(seedInvoice.status || '').toLowerCase());
+            arShowModal(
+                `Invoice Details - ${arEscape(seedInvoice.invoice_number || seedInvoice.id)}`,
+                `
+                    <div class="row">
+                        <div class="col-md-6 mb-3"><strong>Customer</strong><br>${arEscape(seedInvoice.customer_name || 'Unknown')}</div>
+                        <div class="col-md-6 mb-3"><strong>Status</strong><br>${arEscape(seedInvoice.status || 'N/A')}</div>
+                        <div class="col-md-6 mb-3"><strong>Invoice Date</strong><br>${seedInvoice.invoice_date ? new Date(seedInvoice.invoice_date).toLocaleDateString() : 'N/A'}</div>
+                        <div class="col-md-6 mb-3"><strong>Due Date</strong><br>${seedInvoice.due_date ? new Date(seedInvoice.due_date).toLocaleDateString() : 'N/A'}</div>
+                        <div class="col-md-6 mb-3"><strong>Total Amount</strong><br>${arFormatMoney(seedInvoice.total_amount || 0)}</div>
+                        <div class="col-md-6 mb-3"><strong>Outstanding Balance</strong><br>${arFormatMoney(seedInvoice.balance ?? seedInvoice.total_amount ?? 0)}</div>
+                    </div>
+                `,
+                `
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    ${canSend ? `<button type="button" class="btn btn-success" onclick="sendInvoice('${seedInvoice.id}')"><i class="fas fa-paper-plane me-1"></i>Send Invoice</button>` : ''}
+                `
+            );
+        };
+
+        sendInvoice = async function(id) {
+            const seedInvoice = arMergedInvoices.find(item => String(item.id) === String(id) && item.source === 'seed');
+            if (!seedInvoice) {
+                if (originalSendInvoiceFn) {
+                    return originalSendInvoiceFn(id);
+                }
+                return;
+            }
+
+            if (seedInvoice.record_mode !== 'process') {
+                showAlert('This invoice is retained as a historical customer record.', 'warning');
+                return;
+            }
+
+            showConfirmDialog(
+                'Send Invoice',
+                'Mark this invoice as sent and update the customer record?',
+                async () => {
+                    window.FinancialHQState?.updateInvoiceStatus?.(id, 'sent');
+                    arCloseVisibleModals();
+                    showAlert('Invoice sent successfully.', 'success');
+                    await loadInvoices();
+                }
+            );
+        };
+
+        deleteInvoice = async function(id) {
+            const seedInvoice = arMergedInvoices.find(item => String(item.id) === String(id) && item.source === 'seed');
+            if (seedInvoice) {
+                showAlert('This invoice is preserved for receivables history.', 'warning');
+                return;
+            }
+            if (originalDeleteInvoiceFn) {
+                return originalDeleteInvoiceFn(id);
+            }
+        };
+
+        loadPayments = async function() {
+            const tbody = document.querySelector('#collectionsTable tbody');
+            const apiPayments = await arFetchJsonSafe('../api/payments.php?type=received');
+            arMergedPayments = arMergeRecords(apiPayments, window.FinancialHQState?.getPaymentsReceived?.() || []);
+
+            if (!tbody) {
+                return;
+            }
+
+            if (!arMergedPayments.length) {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No collections recorded.</td></tr>';
+                arUpdateReportCards();
+                return;
+            }
+
+            tbody.innerHTML = arMergedPayments.map(payment => {
+                const actions = payment.source === 'seed'
+                    ? `<button class="btn btn-sm btn-outline-primary" onclick="viewPayment('${payment.id}')"><i class="fas fa-eye"></i></button>`
+                    : `
+                        <button class="btn btn-sm btn-outline-primary me-1" onclick="viewPayment('${payment.id}')"><i class="fas fa-eye"></i></button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deletePayment('${payment.id}')"><i class="fas fa-trash"></i></button>
+                    `;
+
+                return `
+                    <tr>
+                        <td>${arEscape(payment.payment_number || payment.id)}</td>
+                        <td>${arEscape(payment.customer_name || 'Unknown')}</td>
+                        <td>${arEscape(payment.invoice_number || 'N/A')}</td>
+                        <td>${payment.payment_date ? new Date(payment.payment_date).toLocaleDateString() : 'N/A'}</td>
+                        <td>${arFormatMoney(payment.amount || 0)}</td>
+                        <td>${arEscape(String(payment.payment_method || 'unknown').replace(/_/g, ' ').toUpperCase())}</td>
+                        <td>${arEscape(payment.reference_number || 'N/A')}</td>
+                        <td>${actions}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            arUpdateReportCards();
+        };
+
+        viewPayment = async function(id) {
+            const seedPayment = arMergedPayments.find(item => String(item.id) === String(id) && item.source === 'seed');
+            if (!seedPayment) {
+                if (originalViewPaymentFn) {
+                    return originalViewPaymentFn(id);
+                }
+                return;
+            }
+
+            arShowModal(
+                `Collection Details - ${arEscape(seedPayment.payment_number || seedPayment.id)}`,
+                `
+                    <div class="row">
+                        <div class="col-md-6 mb-3"><strong>Customer</strong><br>${arEscape(seedPayment.customer_name || 'Unknown')}</div>
+                        <div class="col-md-6 mb-3"><strong>Invoice</strong><br>${arEscape(seedPayment.invoice_number || 'N/A')}</div>
+                        <div class="col-md-6 mb-3"><strong>Payment Date</strong><br>${seedPayment.payment_date ? new Date(seedPayment.payment_date).toLocaleDateString() : 'N/A'}</div>
+                        <div class="col-md-6 mb-3"><strong>Payment Method</strong><br>${arEscape(String(seedPayment.payment_method || '').replace(/_/g, ' ').toUpperCase())}</div>
+                        <div class="col-md-6 mb-3"><strong>Amount</strong><br>${arFormatMoney(seedPayment.amount || 0)}</div>
+                        <div class="col-md-6 mb-3"><strong>Reference</strong><br>${arEscape(seedPayment.reference_number || 'N/A')}</div>
+                    </div>
+                `
+            );
+        };
+
+        deletePayment = async function(id) {
+            const seedPayment = arMergedPayments.find(item => String(item.id) === String(id) && item.source === 'seed');
+            if (seedPayment) {
+                showAlert('This collection record is preserved for audit continuity.', 'warning');
+                return;
+            }
+            if (originalDeletePaymentFn) {
+                return originalDeletePaymentFn(id);
+            }
+        };
+
+        loadAdjustments = async function() {
+            const tbody = document.querySelector('#adjustmentsTable tbody');
+            const apiAdjustments = await arFetchJsonSafe('../api/adjustments.php?type=receivable');
+            arMergedAdjustments = arMergeRecords(apiAdjustments, window.FinancialHQState?.getAdjustments?.('receivable') || []);
+
+            if (!tbody) {
+                return;
+            }
+
+            if (!arMergedAdjustments.length) {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No receivable adjustments recorded.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = arMergedAdjustments.map(adjustment => {
+                const actions = adjustment.source === 'seed'
+                    ? `<button class="btn btn-sm btn-outline-primary" onclick="viewAdjustment('${adjustment.id}')"><i class="fas fa-eye"></i></button>`
+                    : `
+                        <button class="btn btn-sm btn-outline-primary me-1" onclick="viewAdjustment('${adjustment.id}')"><i class="fas fa-eye"></i></button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteAdjustment('${adjustment.id}')"><i class="fas fa-trash"></i></button>
+                    `;
+
+                const relatedInvoice = arMergedInvoices.find(item => String(item.id) === String(adjustment.invoice_id));
+                return `
+                    <tr>
+                        <td>${arEscape(adjustment.adjustment_number || adjustment.id)}</td>
+                        <td>${arEscape(String(adjustment.adjustment_type || '').replace(/_/g, ' ').toUpperCase())}</td>
+                        <td>${arEscape(adjustment.customer_name || 'Unknown')}</td>
+                        <td>${arEscape(adjustment.invoice_number || relatedInvoice?.invoice_number || 'N/A')}</td>
+                        <td>${arFormatMoney(adjustment.amount || 0)}</td>
+                        <td>${arEscape(adjustment.reason || 'N/A')}</td>
+                        <td>${adjustment.adjustment_date ? new Date(adjustment.adjustment_date).toLocaleDateString() : 'N/A'}</td>
+                        <td>${actions}</td>
+                    </tr>
+                `;
+            }).join('');
+        };
+
+        viewAdjustment = async function(id) {
+            const seedAdjustment = arMergedAdjustments.find(item => String(item.id) === String(id) && item.source === 'seed');
+            if (!seedAdjustment) {
+                if (originalViewAdjustmentFn) {
+                    return originalViewAdjustmentFn(id);
+                }
+                return;
+            }
+
+            const relatedInvoice = arMergedInvoices.find(item => String(item.id) === String(seedAdjustment.invoice_id));
+            arShowModal(
+                `Adjustment Details - ${arEscape(seedAdjustment.adjustment_number || seedAdjustment.id)}`,
+                `
+                    <div class="row">
+                        <div class="col-md-6 mb-3"><strong>Customer</strong><br>${arEscape(seedAdjustment.customer_name || 'Unknown')}</div>
+                        <div class="col-md-6 mb-3"><strong>Invoice</strong><br>${arEscape(relatedInvoice?.invoice_number || 'N/A')}</div>
+                        <div class="col-md-6 mb-3"><strong>Type</strong><br>${arEscape(String(seedAdjustment.adjustment_type || '').replace(/_/g, ' ').toUpperCase())}</div>
+                        <div class="col-md-6 mb-3"><strong>Date</strong><br>${seedAdjustment.adjustment_date ? new Date(seedAdjustment.adjustment_date).toLocaleDateString() : 'N/A'}</div>
+                        <div class="col-md-12 mb-3"><strong>Reason</strong><br>${arEscape(seedAdjustment.reason || 'N/A')}</div>
+                        <div class="col-md-6 mb-3"><strong>Amount</strong><br>${arFormatMoney(seedAdjustment.amount || 0)}</div>
+                    </div>
+                `
+            );
+        };
+
+        deleteAdjustment = async function(id) {
+            const seedAdjustment = arMergedAdjustments.find(item => String(item.id) === String(id) && item.source === 'seed');
+            if (seedAdjustment) {
+                showAlert('This adjustment record is preserved for reporting history.', 'warning');
+                return;
+            }
+            if (originalDeleteAdjustmentFn) {
+                return originalDeleteAdjustmentFn(id);
+            }
+        };
+
+        generateAgingReport = async function() {
+            const tbody = document.querySelector('#agingTable tbody');
+            arCurrentAging = window.FinancialHQState?.getReceivablesAging?.() || [];
+
+            if (!tbody) {
+                return;
+            }
+
+            if (!arCurrentAging.length) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No aging data available.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = arCurrentAging.map(customer => `
+                <tr>
+                    <td>${arEscape(customer.customer_name || 'Unknown')}</td>
+                    <td>${arFormatMoney(customer.current || 0)}</td>
+                    <td>${arFormatMoney(customer.days30 || 0)}</td>
+                    <td>${arFormatMoney(customer.days60 || 0)}</td>
+                    <td>${arFormatMoney(customer.days90 || 0)}</td>
+                    <td>${arFormatMoney(customer.legacy || 0)}</td>
+                    <td>${arFormatMoney(customer.total || 0)}</td>
+                </tr>
+            `).join('');
+
+            showAlert('Aging report generated successfully', 'success');
+        };
+
+        loadReportsData = function() {
+            arUpdateReportCards();
+        };
+
+        exportReport = async function(type) {
+            let headers = [];
+            let rows = [];
+            const filename = `${type}_report_${new Date().toISOString().slice(0, 10)}.csv`;
+
+            if (type === 'receivables') {
+                headers = ['Invoice #', 'Customer', 'Customer Code', 'Invoice Date', 'Due Date', 'Amount', 'Balance', 'Status'];
+                rows = arMergedInvoices.map(invoice => [
+                    invoice.invoice_number || invoice.id,
+                    invoice.customer_name || 'Unknown',
+                    invoice.customer_code || '',
+                    invoice.invoice_date || '',
+                    invoice.due_date || '',
+                    Number(invoice.total_amount || 0).toFixed(2),
+                    Number(invoice.balance ?? invoice.total_amount ?? 0).toFixed(2),
+                    invoice.status || ''
+                ]);
+            } else if (type === 'collections') {
+                headers = ['Payment #', 'Customer', 'Invoice #', 'Payment Date', 'Amount', 'Method', 'Reference'];
+                rows = arMergedPayments.map(payment => [
+                    payment.payment_number || payment.id,
+                    payment.customer_name || 'Unknown',
+                    payment.invoice_number || 'N/A',
+                    payment.payment_date || '',
+                    Number(payment.amount || 0).toFixed(2),
+                    payment.payment_method || '',
+                    payment.reference_number || ''
+                ]);
+            } else {
+                if (!arCurrentAging.length) {
+                    arCurrentAging = window.FinancialHQState?.getReceivablesAging?.() || [];
+                }
+                headers = ['Customer', 'Current', '1-30 Days', '31-60 Days', '61-90 Days', '90+ Days', 'Total'];
+                rows = arCurrentAging.map(customer => [
+                    customer.customer_name || 'Unknown',
+                    Number(customer.current || 0).toFixed(2),
+                    Number(customer.days30 || 0).toFixed(2),
+                    Number(customer.days60 || 0).toFixed(2),
+                    Number(customer.days90 || 0).toFixed(2),
+                    Number(customer.legacy || 0).toFixed(2),
+                    Number(customer.total || 0).toFixed(2)
+                ]);
+            }
+
+            if (!rows.length) {
+                showAlert(`No data available for ${type} export.`, 'warning');
+                return;
+            }
+
+            const csv = [
+                headers.join(','),
+                ...rows.map(row => row.map(value => `"${String(value ?? '').replace(/"/g, '""')}"`).join(','))
+            ].join('\n');
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            showAlert(`${type.charAt(0).toUpperCase() + type.slice(1)} report exported successfully.`, 'success');
+        };
+    </script>
+
     <!-- Privacy Mode - Hide amounts with asterisks + Eye button -->
     <script src="../includes/privacy_mode.js?v=12"></script>
 

@@ -36,17 +36,9 @@ require_once '../includes/logger.php';
     exit(1);
 }
 
+$method = $_SERVER['REQUEST_METHOD'];
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
-$auth = new Auth();
-ensure_api_auth($method, [
-    'GET' => 'audit.view',
-    'PUT' => 'audit.view',
-    'DELETE' => 'audit.view',
-    'POST' => 'audit.view',
-    'PATCH' => 'audit.view',
-]);
-
 }
 
 if (!isset($_SESSION['user'])) {
@@ -63,7 +55,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit();
 }
 
-$method = $_SERVER['REQUEST_METHOD'];
+$auth = new Auth();
+ensure_api_auth($method, [
+    'GET' => 'audit.view',
+    'PUT' => 'audit.view',
+    'DELETE' => 'audit.view',
+    'POST' => 'audit.view',
+    'PATCH' => 'audit.view',
+]);
 
 function getAuditTrail($db, $filters = []) {
     try {

@@ -201,6 +201,68 @@ class Logger {
             // If database logging fails, at least we have file logging
             $this->error("Failed to log audit trail to database: " . $e->getMessage());
         }
+
+        if ($this->shouldCaptureDeletedItem($action, $table, $newValues)) {
+            $this->captureDeletedItem($table, $recordId, $userId, $oldValues);
+        }
+    }
+
+    private function shouldCaptureDeletedItem($action, $table, $newValues) {
+        $actionValue = strtolower(trim((string)$action));
+        $tableValue = strtolower(trim((string)$table));
+
+        if ($tableValue === '' || $tableValue === 'trash' || $tableValue === 'users') {
+            return false;
+        }
+
+        if (strpos($actionValue, 'delete') === false) {
+            return false;
+        }
+
+        if (strpos($actionValue, 'restore') !== false || strpos($actionValue, 'permanent') !== false) {
+            return false;
+        }
+
+        if (!empty($newValues)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private function captureDeletedItem($table, $recordId, $userId, $oldValues) {
+        try {
+            $resolvedRecordId = $recordId;
+            if ($resolvedRecordId === '' || $resolvedRecordId === null) {
+                if (is_array($oldValues) && isset($oldValues['id'])) {
+                    $resolvedRecordId = $oldValues['id'];
+                } elseif (is_object($oldValues) && isset($oldValues->id)) {
+                    $resolvedRecordId = $oldValues->id;
+                }
+            }
+
+            if ($resolvedRecordId === '' || $resolvedRecordId === null) {
+                return;
+            }
+
+            $deleteStmt = $this->db->prepare("
+                DELETE FROM deleted_items
+                WHERE table_name = ? AND record_id = ?
+            ");
+            $deleteStmt->execute([$table, $resolvedRecordId]);
+
+            $insertStmt = $this->db->prepare("
+                INSERT INTO deleted_items (table_name, record_id, deleted_by, deleted_at, auto_delete_at)
+                VALUES (?, ?, ?, NOW(), DATE_ADD(NOW(), INTERVAL 30 DAY))
+            ");
+            $insertStmt->execute([$table, $resolvedRecordId, $userId]);
+        } catch (Exception $e) {
+            $this->warning('Failed to write deleted item to trash tracking', [
+                'table' => $table,
+                'record_id' => $recordId,
+                'error' => $e->getMessage()
+            ]);
+        }
     }
 
     /**

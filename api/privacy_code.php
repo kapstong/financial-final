@@ -47,8 +47,8 @@ try {
     if (file_exists(__DIR__ . '/../includes/database.php')) {
         require_once __DIR__ . '/../includes/database.php';
     }
-    if (file_exists(__DIR__ . '/../includes/mailer.php')) {
-        require_once __DIR__ . '/../includes/mailer.php';
+    if (file_exists(__DIR__ . '/../includes/two_factor_auth.php')) {
+        require_once __DIR__ . '/../includes/two_factor_auth.php';
     }
 
     if (session_status() === PHP_SESSION_NONE) {
@@ -70,7 +70,8 @@ try {
     
     switch ($action) {
         case 'send_code':
-            handleSendCode($user);
+        case 'check_method':
+            handleCheckMethod($user);
             break;
 
         case 'verify_code':
@@ -96,44 +97,29 @@ try {
 }
 
 /**
- * Handle sending verification code
+ * Handle reporting the available privacy verification method
  */
-function handleSendCode($user) {
+function handleCheckMethod($user) {
     try {
-        // Send code via email
-        $email = trim((string) ($user['email'] ?? ''));
-        if (!$email || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $totpConfig = getTotpConfigForUser((int)($user['id'] ?? 0));
+        if (!$totpConfig) {
             http_response_code(400);
-            echo json_encode(['error' => 'No valid email address is associated with this account']);
+            echo json_encode([
+                'success' => false,
+                'error' => 'Authenticator verification is not configured for this account. Enable TOTP in Profile Settings first.'
+            ]);
             return;
         }
 
-        $code = generateVerificationCode();
-        $mailer = Mailer::getInstance();
-        $firstName = $user['first_name'] ?? '';
-        $sent = $mailer->sendVerificationCode($email, $code, $firstName);
-        if (!$sent) {
-            error_log('Privacy OTP mail send failed for user ' . ($user['id'] ?? 'unknown') . ': ' . ($mailer->getLastError() ?: 'unknown mailer error'));
-            throw new Exception('Unable to send verification email at this time');
-        }
-
-        // Store code in session with timestamp only after successful email delivery attempt
-        $_SESSION['privacy_code'] = $code;
-        $_SESSION['privacy_code_time'] = time();
-        
-        // Return masked email
-        $masked_email = maskEmail($email);
-        
         echo json_encode([
             'success' => true,
-            'email' => $email,
-            'masked_email' => $masked_email,
-            'message' => 'Code sent to email'
+            'method' => 'totp',
+            'message' => 'Use the current 6-digit code from your authenticator app.'
         ]);
-        
+
     } catch (Exception $e) {
         http_response_code(500);
-        echo json_encode(['error' => 'Failed to send code: ' . $e->getMessage()]);
+        echo json_encode(['error' => 'Failed to prepare verification: ' . $e->getMessage()]);
     }
 }
 
@@ -143,47 +129,37 @@ function handleSendCode($user) {
 function handleVerifyCode($user) {
     try {
         $code = $_POST['code'] ?? '';
-        
-        // Check if code exists and is not expired
-        if (!isset($_SESSION['privacy_code'])) {
+
+        if (!preg_match('/^\d{6}$/', (string)$code)) {
             http_response_code(400);
-            echo json_encode(['error' => 'No code sent yet']);
-            exit;
+            echo json_encode(['error' => 'A valid 6-digit authenticator code is required']);
+            return;
         }
-        
-        $code_time = $_SESSION['privacy_code_time'] ?? 0;
-        $current_time = time();
-        
-        // Check if code expired (2 minutes = 120 seconds)
-        if ($current_time - $code_time > 120) {
-            unset($_SESSION['privacy_code']);
-            unset($_SESSION['privacy_code_time']);
+
+        $totpConfig = getTotpConfigForUser((int)($user['id'] ?? 0));
+        if (!$totpConfig) {
             http_response_code(400);
-            echo json_encode(['error' => 'Code expired']);
-            exit;
+            echo json_encode(['error' => 'Authenticator verification is not configured for this account']);
+            return;
         }
-        
-        // Verify code
-        if ($code === $_SESSION['privacy_code']) {
+
+        $twoFactor = TwoFactorAuth::getInstance();
+        if ($twoFactor->verifyTOTPCode($totpConfig['secret'], $code, 1)) {
             // Mark as unlocked in session
             $_SESSION['privacy_unlocked'] = true;
             $_SESSION['privacy_unlocked_time'] = time();
             $_SESSION['privacy_visible'] = true;
-            
-            // Clear the code
-            unset($_SESSION['privacy_code']);
-            unset($_SESSION['privacy_code_time']);
-            
+
             echo json_encode([
                 'success' => true,
                 'unlocked' => true,
-                'message' => 'Code verified successfully'
+                'message' => 'Authenticator code verified successfully'
             ]);
         } else {
             http_response_code(400);
-            echo json_encode(['error' => 'Invalid code']);
+            echo json_encode(['error' => 'Invalid authenticator code']);
         }
-        
+
     } catch (Exception $e) {
         http_response_code(500);
         echo json_encode(['error' => 'Verification failed: ' . $e->getMessage()]);
@@ -243,28 +219,30 @@ function handleSetVisibility($user) {
 }
 
 /**
- * Generate a random 6-digit verification code
+ * Fetch enabled TOTP configuration for the current user.
  */
-function generateVerificationCode() {
-    return str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
-}
-
-/**
- * Mask email address for display
- */
-function maskEmail($email) {
-    if (!$email || !strpos($email, '@')) {
-        return '***@***.***';
+function getTotpConfigForUser(int $userId): ?array
+{
+    if ($userId <= 0) {
+        return null;
     }
-    
-    $parts = explode('@', $email);
-    $name = $parts[0];
-    $domain = $parts[1];
-    
-    $name_length = strlen($name);
-    $masked_name = substr($name, 0, 1) . str_repeat('*', max(1, $name_length - 2)) . substr($name, -1);
-    
-    return $masked_name . '@' . $domain;
+
+    $db = Database::getInstance()->getConnection();
+    $stmt = $db->prepare("
+        SELECT method, secret
+        FROM user_2fa
+        WHERE user_id = ? AND is_enabled = 1
+        ORDER BY created_at DESC
+        LIMIT 1
+    ");
+    $stmt->execute([$userId]);
+    $config = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$config || ($config['method'] ?? '') !== 'totp' || empty($config['secret'])) {
+        return null;
+    }
+
+    return $config;
 }
 
 ob_end_flush();

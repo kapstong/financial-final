@@ -39,6 +39,60 @@ if (!function_exists('sanitizeDemoLabels')) {
     }
 }
 
+if (!function_exists('normalizeDepartmentLabel')) {
+    function normalizeDepartmentLabel(string $value): string
+    {
+        $value = preg_replace('/\s+/', ' ', trim($value));
+        if ($value === '') {
+            return '';
+        }
+
+        $patterns = [
+            '/^core\s*1\b/i' => 'Core 1',
+            '/^core\s*2\b/i' => 'Core 2',
+            '/^hr\s*3\b/i' => 'HR 3',
+            '/^hr\s*4\b/i' => 'HR 4',
+            '/^logistics\s*1\b/i' => 'Logistics 1',
+            '/^logistics\s*2\b/i' => 'Logistics 2',
+            '/^finance\b/i' => 'Finance'
+        ];
+
+        foreach ($patterns as $pattern => $label) {
+            if (preg_match($pattern, $value)) {
+                return $label;
+            }
+        }
+
+        return ucwords($value);
+    }
+}
+
+if (!function_exists('makeFriendlyJournalDescription')) {
+    function makeFriendlyJournalDescription($description)
+    {
+        $description = trim((string)$description);
+        if ($description === '') {
+            return 'Journal entry';
+        }
+
+        $departmentMatch = '';
+        if (preg_match('/^(core\s*\d|hr\s*\d|logistics\s*\d|finance)\b/i', $description, $matches)) {
+            $departmentMatch = normalizeDepartmentLabel($matches[1]);
+        }
+
+        $cleaned = preg_replace('/\b(cs|pi|pay|txn|ref|ch)_[a-z0-9]+\b/i', '', $description);
+        $cleaned = preg_replace('/\((gcash|maya|paymaya|cash|bank transfer|bank|card|credit card|debit card)\)/i', '', $cleaned);
+        $cleaned = preg_replace('/\b(payment|processed payment|mode of payment|reference number|ref)\b/i', '', $cleaned);
+        $cleaned = preg_replace('/\s{2,}/', ' ', trim((string)$cleaned, " -:\t\n\r\0\x0B"));
+
+        if ($departmentMatch !== '') {
+            return $departmentMatch;
+        }
+
+        return $cleaned !== '' ? ucfirst($cleaned) : 'Journal entry';
+    }
+}
+
 // Trial balance date filters
 $trialPeriod = isset($_GET['trial_period']) ? strtolower(trim($_GET['trial_period'])) : 'monthly';
 $trialDateToInput = isset($_GET['trial_date']) ? trim($_GET['trial_date']) : date('Y-m-d');
@@ -407,6 +461,10 @@ try {
         ORDER BY je.entry_date DESC, je.id DESC
         LIMIT 50
     ")->fetchAll();
+    foreach ($journalEntriesQuery as &$journalEntry) {
+        $journalEntry['description'] = makeFriendlyJournalDescription($journalEntry['description'] ?? '');
+    }
+    unset($journalEntry);
 
     // Fetch trial balance data (normalize by account type)
     $trialBalanceStmt = $db->prepare("
@@ -499,6 +557,7 @@ try {
             if (count($trialBreakdown[$accountId]) >= 50) {
                 continue;
             }
+            $row['description'] = makeFriendlyJournalDescription($row['description'] ?? '');
             $trialBreakdown[$accountId][] = $row;
         }
     }
@@ -2178,11 +2237,45 @@ try {
                             </div>
                             <!-- Audit Trail Tab -->
                             <div class="tab-pane fade" id="audit" role="tabpanel" aria-labelledby="audit-tab">
-                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
                                     <h6 class="mb-0">User Activity Logs</h6>
-                                    <button class="btn btn-outline-secondary" onclick="showFilterModal()"><i class="fas fa-filter me-2"></i>Filter</button>
+                                    <div class="d-flex gap-2">
+                                        <button class="btn btn-outline-secondary" type="button" onclick="clearFilters()"><i class="fas fa-rotate-left me-2"></i>Reset</button>
+                                        <button class="btn btn-primary" type="button" onclick="exportAuditTrail()"><i class="fas fa-download me-2"></i>Export Filtered</button>
+                                    </div>
                                 </div>
-                                <div class="table-responsive">
+                                <div class="card mb-3">
+                                    <div class="card-body">
+                                        <form id="auditFilterForm" class="row g-2 align-items-end">
+                                            <div class="col-md-3">
+                                                <label for="filterDateFrom" class="form-label">Date From</label>
+                                                <input type="date" class="form-control" id="filterDateFrom">
+                                            </div>
+                                            <div class="col-md-3">
+                                                <label for="filterDateTo" class="form-label">Date To</label>
+                                                <input type="date" class="form-control" id="filterDateTo">
+                                            </div>
+                                            <div class="col-md-3">
+                                                <label for="filterUser" class="form-label">User</label>
+                                                <input type="text" class="form-control" id="filterUser" placeholder="Search by name or username">
+                                            </div>
+                                            <div class="col-md-3">
+                                                <label for="filterAction" class="form-label">Action</label>
+                                                <select class="form-select" id="filterAction">
+                                                    <option value="">All Actions</option>
+                                                    <option value="Created">Created</option>
+                                                    <option value="Edited">Edited</option>
+                                                    <option value="Deleted">Deleted</option>
+                                                    <option value="Generated">Generated</option>
+                                                    <option value="Viewed">Viewed</option>
+                                                    <option value="Printed">Printed</option>
+                                                    <option value="Exported">Exported</option>
+                                                </select>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                                <div class="table-responsive" style="max-height: 460px; overflow-y: auto;">
                                     <table class="table table-striped">
                                         <thead>
                                             <tr>
@@ -2192,7 +2285,7 @@ try {
                                                 <th>Details</th>
                                             </tr>
                                         </thead>
-                                        <tbody>
+                                        <tbody id="auditTableBody">
                                             <?php if (empty($auditTrail)): ?>
                                                 <tr>
                                                     <td colspan="4" class="text-center text-muted py-4">
@@ -2634,6 +2727,7 @@ try {
 
         const auditTablesScope = 'journal_entries,journal_entry_lines,chart_of_accounts,trial_balance';
         let auditPollTimer = null;
+        let currentAuditLogs = [];
 
         function normalizeAuditResponse(data) {
             if (Array.isArray(data)) {
@@ -2660,6 +2754,7 @@ try {
                         if (!logs) {
                             throw new Error(data?.error || 'Failed to fetch audit trail');
                         }
+                        currentAuditLogs = logs;
                         updateAuditTrailTable(logs);
                     })
                     .catch(error => {
@@ -2698,23 +2793,16 @@ try {
 
         function applyFilters() {
             const params = buildAuditParams();
-
             fetchAuditTrail(params);
-
-            const modal = bootstrap.Modal.getInstance(document.getElementById('filterModal'));
-            modal.hide();
         }
 
         function clearFilters() {
-            // Reset filter form
-            document.getElementById('auditFilterForm').reset();
-
-            // Reload original audit trail
-            location.reload();
+            document.getElementById('auditFilterForm')?.reset();
+            fetchAuditTrail(buildAuditParams(), { silent: true });
         }
 
         function updateAuditTrailTable(auditTrail) {
-            const tbody = document.querySelector('#audit tbody');
+            const tbody = document.getElementById('auditTableBody');
 
             if (!auditTrail || auditTrail.length === 0) {
                 tbody.innerHTML = `
@@ -2765,6 +2853,43 @@ try {
                     <td>${formatDetails(log)}</td>
                 </tr>
             `}).join('');
+        }
+
+        function exportAuditTrail() {
+            if (!currentAuditLogs || currentAuditLogs.length === 0) {
+                showAlert('error', 'No audit records available for export.');
+                return;
+            }
+
+            const headers = ['Date/Time', 'User', 'Action', 'Details'];
+            const rows = currentAuditLogs.map(log => {
+                const rawDate = log.created_at || log.date_time || log.formatted_date || log.date || '';
+                const dateValue = rawDate ? new Date(rawDate).toLocaleString() : 'N/A';
+                const userValue = log.full_name || log.username || log.user || log.user_name || 'Unknown';
+                const detailsValue = (() => {
+                    const raw = (log.details || log.table_name || '').toString();
+                    const label = raw ? raw.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase()) : 'Unknown';
+                    const recordId = (log.record_id || '').toString().trim();
+                    return recordId ? `${label} #${recordId}` : label;
+                })();
+
+                return [dateValue, userValue, log.action || '', detailsValue];
+            });
+
+            let csv = headers.join(',') + '\n';
+            rows.forEach(row => {
+                csv += row.map(field => `"${String(field).replace(/"/g, '""')}"`).join(',') + '\n';
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.href = url;
+            link.download = `general_ledger_audit_${new Date().toISOString().slice(0, 10)}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
         }
 
         function startAuditPolling() {
@@ -3924,6 +4049,13 @@ try {
             if (auditTabPane && auditTabPane.classList.contains('show')) {
                 startAuditPolling();
             }
+
+            ['filterDateFrom', 'filterDateTo', 'filterUser', 'filterAction'].forEach(id => {
+                const element = document.getElementById(id);
+                if (!element) return;
+                const eventName = element.tagName === 'INPUT' && element.type === 'text' ? 'input' : 'change';
+                element.addEventListener(eventName, applyFilters);
+            });
         });
 
         // Financial Statements Functions

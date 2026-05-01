@@ -12,6 +12,7 @@
     let eyeButton = null;
     const STORAGE_KEY = 'privacyModeVisible';
     const SERVER_REFRESH_KEY = 'privacyModeRefreshPending';
+    let verificationReady = false;
 
     const AMOUNT_REGEX = /(?:[₱$€£¥]\s*-?[\d,]+\.?\d*)|(?:PHP\s*-?[\d,]+\.?\d*)|(?:P\s*-?[\d,]+\.?\d*)|(?:\(\s*(?:[₱$€£¥P])?\s*-?[\d,]+\.?\d*\s*\))/g;
     const MASKED_CLASS = 'privacy-mask';
@@ -85,54 +86,32 @@
                     <div class="modal-content">
                         <div class="modal-header bg-primary text-white">
                             <h5 class="modal-title">
-                                <i class="fas fa-envelope me-2"></i>Email Verification
+                                <i class="fas fa-shield-alt me-2"></i>Verification Required
                             </h5>
                             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                         </div>
                         <div class="modal-body">
-                            <div class="alert alert-info">
+                            <div class="alert alert-info" id="privacyVerificationMessage">
                                 <i class="fas fa-info-circle me-2"></i>
                                 <strong>Protected Information</strong><br>
-                                A 6-digit verification code will be sent to your email address.
+                                Enter the current 6-digit code from your authenticator app.
                             </div>
 
-                            <div id="emailSendSection">
-                                <p class="text-muted mb-3">
-                                    Click the button below to receive your verification code via email.
-                                </p>
-                                <button type="button" class="btn btn-primary btn-lg w-100" id="sendCodeBtn">
-                                    <i class="fas fa-paper-plane me-2"></i>Send Verification Code
-                                </button>
-                            </div>
-
-                            <div id="codeVerifySection" style="display: none;">
-                                <div class="alert alert-success mb-3" id="emailSentAlert">
-                                    <i class="fas fa-check-circle me-2"></i>
-                                    Code sent to <strong id="userEmail"></strong>
-                                    <div class="mt-2 small">
-                                        Code expires in: <strong id="codeTimer">2:00</strong>
-                                    </div>
+                            <form id="privacyCodeForm">
+                                <div class="mb-3">
+                                    <label for="privacyCode" class="form-label">Enter 6-Digit Code</label>
+                                    <input type="text" class="form-control form-control-lg text-center"
+                                           id="privacyCode" placeholder="000000" maxlength="6"
+                                           pattern="[0-9]{6}" required autofocus
+                                           autocomplete="one-time-code"
+                                           style="font-size: 24px; letter-spacing: 8px;">
+                                    <div class="invalid-feedback" id="privacyCodeError"></div>
                                 </div>
-
-                                <form id="privacyCodeForm">
-                                    <div class="mb-3">
-                                        <label for="privacyCode" class="form-label">Enter 6-Digit Code</label>
-                                        <input type="text" class="form-control form-control-lg text-center"
-                                               id="privacyCode" placeholder="000000" maxlength="6"
-                                               pattern="[0-9]{6}" required autofocus
-                                               style="font-size: 24px; letter-spacing: 8px;">
-                                        <div class="invalid-feedback" id="privacyCodeError"></div>
-                                    </div>
-                                </form>
-
-                                <button type="button" class="btn btn-link btn-sm text-muted w-100" id="resendCodeBtn">
-                                    Didn't receive the code? Resend
-                                </button>
-                            </div>
+                            </form>
                         </div>
                         <div class="modal-footer">
                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                            <button type="button" class="btn btn-success" id="privacyVerifyBtn" style="display: none;">
+                            <button type="button" class="btn btn-success" id="privacyVerifyBtn">
                                 <i class="fas fa-unlock me-2"></i>Verify & Show Amounts
                             </button>
                         </div>
@@ -144,8 +123,6 @@
         document.body.insertAdjacentHTML('beforeend', modalHTML);
 
         // Event listeners
-        document.getElementById('sendCodeBtn').addEventListener('click', sendVerificationCode);
-        document.getElementById('resendCodeBtn').addEventListener('click', sendVerificationCode);
         document.getElementById('privacyCodeForm').addEventListener('submit', (e) => {
             e.preventDefault();
             verifyCodeAndShow();
@@ -155,90 +132,12 @@
         // Auto-verify when 6 digits entered
         document.getElementById('privacyCode').addEventListener('input', (e) => {
             const code = e.target.value;
+            e.target.classList.remove('is-invalid');
+            document.getElementById('privacyCodeError').textContent = '';
             if (code.length === 6 && /^\d{6}$/.test(code)) {
                 verifyCodeAndShow();
             }
         });
-    }
-
-    /**
-     * Send verification code to email
-     */
-    let codeTimerInterval = null;
-
-    function sendVerificationCode() {
-        const sendBtn = document.getElementById('sendCodeBtn');
-        const originalText = sendBtn.innerHTML;
-
-        sendBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Sending...';
-        sendBtn.disabled = true;
-
-        const apiPath = getApiPath('privacy_code.php');
-
-        fetch(apiPath, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: 'action=send_code'
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                // Hide send section, show verify section
-                document.getElementById('emailSendSection').style.display = 'none';
-                document.getElementById('codeVerifySection').style.display = 'block';
-                document.getElementById('privacyVerifyBtn').style.display = 'block';
-
-                // Show masked email address
-                const maskedEmail = data.masked_email || maskEmail(data.email || '');
-                document.getElementById('userEmail').textContent = maskedEmail;
-
-                // Start countdown timer
-                startCodeTimer();
-
-                // Focus on code input
-                setTimeout(() => {
-                    document.getElementById('privacyCode').focus();
-                }, 100);
-
-            } else {
-                alert('Error: ' + (data.error || 'Failed to send code'));
-                sendBtn.innerHTML = originalText;
-                sendBtn.disabled = false;
-            }
-        })
-        .catch(error => {
-            alert('Network error. Please try again.');
-            sendBtn.innerHTML = originalText;
-            sendBtn.disabled = false;
-        });
-    }
-
-    /**
-     * Start countdown timer for code expiration
-     */
-    function startCodeTimer() {
-        let secondsLeft = 120; // 2 minutes
-        const timerEl = document.getElementById('codeTimer');
-
-        if (codeTimerInterval) {
-            clearInterval(codeTimerInterval);
-        }
-
-        codeTimerInterval = setInterval(() => {
-            secondsLeft--;
-
-            const minutes = Math.floor(secondsLeft / 60);
-            const seconds = secondsLeft % 60;
-            timerEl.textContent = minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
-
-            if (secondsLeft <= 0) {
-                clearInterval(codeTimerInterval);
-                timerEl.textContent = 'EXPIRED';
-                timerEl.classList.add('text-danger');
-            }
-        }, 1000);
     }
 
     /**
@@ -249,6 +148,12 @@
         const errorDiv = document.getElementById('privacyCodeError');
         const verifyBtn = document.getElementById('privacyVerifyBtn');
         const code = codeInput.value;
+
+        if (!verificationReady) {
+            codeInput.classList.add('is-invalid');
+            errorDiv.textContent = 'Verification is not ready for this account.';
+            return;
+        }
 
         if (!code || code.length !== 6) {
             codeInput.classList.add('is-invalid');
@@ -273,11 +178,6 @@
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                // Clear timer
-                if (codeTimerInterval) {
-                    clearInterval(codeTimerInterval);
-                }
-
                 showAmounts();
 
                 const modal = bootstrap.Modal.getInstance(document.getElementById('privacyPasswordModal'));
@@ -285,10 +185,6 @@
 
                 codeInput.value = '';
                 codeInput.classList.remove('is-invalid');
-                setTimeout(() => {
-                    window.location.reload();
-                }, 150);
-
             } else {
                 codeInput.classList.add('is-invalid');
                 errorDiv.textContent = data.error || 'Incorrect code';
@@ -322,9 +218,10 @@
         })
         .then(response => response.json())
         .then(data => {
-            // Always keep amounts hidden on page load to avoid exposing sensitive data automatically,
-            // even if the server session reports an unlocked state. The user must explicitly verify now
-            // to reveal amounts for this browser/session.
+            if (data.success && data.unlocked && data.visible) {
+                showAmounts();
+                return;
+            }
             hideAmounts(true);
             if (storedVisibility === '1') {
                 setStoredVisibility('0');
@@ -371,6 +268,7 @@
      * Show password modal
      */
     function showPasswordModal() {
+        prepareVerification();
         const modal = new bootstrap.Modal(document.getElementById('privacyPasswordModal'));
         modal.show();
 
@@ -499,31 +397,6 @@
             icon.className = 'fas fa-eye';
             eyeButton.title = 'Amounts Visible - Click to Hide';
         }
-    }
-
-    /**
-     * Mask email address for display
-     */
-    function maskEmail(email) {
-        if (!email || email.indexOf('@') === -1) {
-            return email;
-        }
-
-        const parts = email.split('@');
-        const local = parts[0];
-        const domain = parts[1];
-        const localLen = local.length;
-
-        let maskedLocal = '';
-        if (localLen <= 2) {
-            maskedLocal = '*'.repeat(localLen);
-        } else if (localLen <= 4) {
-            maskedLocal = local.slice(0, 1) + '*'.repeat(Math.max(0, localLen - 2)) + local.slice(-1);
-        } else {
-            maskedLocal = local.slice(0, 2) + '*'.repeat(localLen - 4) + local.slice(-2);
-        }
-
-        return maskedLocal + '@' + domain;
     }
 
     /**
@@ -796,6 +669,52 @@
             body: formData.toString()
         }).catch(() => {
             // Ignore visibility sync failures
+        });
+    }
+
+    function prepareVerification() {
+        verificationReady = false;
+
+        const apiPath = getApiPath('privacy_code.php');
+        const messageEl = document.getElementById('privacyVerificationMessage');
+        const codeInput = document.getElementById('privacyCode');
+        const verifyBtn = document.getElementById('privacyVerifyBtn');
+        const errorDiv = document.getElementById('privacyCodeError');
+
+        if (!messageEl || !codeInput || !verifyBtn) {
+            return;
+        }
+
+        messageEl.className = 'alert alert-info';
+        messageEl.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Checking verification method...';
+        codeInput.disabled = true;
+        verifyBtn.disabled = true;
+        codeInput.value = '';
+        codeInput.classList.remove('is-invalid');
+        errorDiv.textContent = '';
+
+        fetch(apiPath + '?action=check_method', {
+            method: 'GET'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (!data.success) {
+                throw new Error(data.error || 'Verification is not available for this account.');
+            }
+
+            verificationReady = true;
+            messageEl.className = 'alert alert-info';
+            messageEl.innerHTML = '<i class="fas fa-mobile-alt me-2"></i><strong>Protected Information</strong><br>Use the current 6-digit code from your authenticator app.';
+            codeInput.disabled = false;
+            verifyBtn.disabled = false;
+            setTimeout(() => codeInput.focus(), 100);
+        })
+        .catch(error => {
+            verificationReady = false;
+            messageEl.className = 'alert alert-warning';
+            messageEl.innerHTML = '<i class="fas fa-exclamation-triangle me-2"></i>' + (error.message || 'Verification is not configured for this account.');
+            codeInput.disabled = true;
+            verifyBtn.disabled = true;
         });
     }
 

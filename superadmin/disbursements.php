@@ -2297,6 +2297,1003 @@ body {
     });
     </script>
 
+    <script src="../includes/financial_hq_state.js"></script>
+    <script>
+    (function() {
+        document.head.insertAdjacentHTML('beforeend', '<style>#logistics-tab, #logistics, button[data-bs-target="#logistics"] { display:none !important; }</style>');
+        let disbMergedRows = [];
+        let disbVisibleRows = [];
+        let disbAuditLogs = [];
+
+        const originalApplyFiltersFn = typeof applyFilters === 'function' ? applyFilters : null;
+        const originalClearFiltersFn = typeof clearFilters === 'function' ? clearFilters : null;
+        const originalLoadClaimsFn = typeof window.loadClaims === 'function' ? window.loadClaims : null;
+        const originalProcessClaimFn = typeof window.processHR3Claim === 'function' ? window.processHR3Claim : null;
+        const originalLoadPayrollFn = typeof window.loadPayroll === 'function' ? window.loadPayroll : null;
+        const originalUpdatePayrollApprovalFn = typeof window.updatePayrollApproval === 'function' ? window.updatePayrollApproval : null;
+        const originalLoadIncentivesFn = typeof window.loadIncentives === 'function' ? window.loadIncentives : null;
+        const originalUpdateIncentiveApprovalFn = typeof window.updateIncentiveApproval === 'function' ? window.updateIncentiveApproval : null;
+
+        function disbEscape(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function disbFormatMoney(value) {
+            return 'PHP ' + Number(value || 0).toLocaleString('en-US', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+        }
+
+        function disbMergeRecords(primary, secondary) {
+            const map = new Map();
+            (secondary || []).forEach(item => map.set(String(item.id), item));
+            (primary || []).forEach(item => map.set(String(item.id), item));
+            return Array.from(map.values());
+        }
+
+        async function disbFetchJsonSafe(url, options) {
+            try {
+                const response = await fetch(url, options);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                return await response.json();
+            } catch (error) {
+                return [];
+            }
+        }
+
+        function disbNormalizeRow(row) {
+            return {
+                ...row,
+                disbursement_date: row.disbursement_date || row.payment_date || '',
+                source_module: row.source_module || (
+                    String(row.reference_number || '').startsWith('HR3-CLAIM-') ? 'claims' :
+                    String(row.reference_number || '').startsWith('PAYROLL-') ? 'payroll' :
+                    String(row.reference_number || '').startsWith('INCENTIVE-') ? 'incentives' :
+                    'manual'
+                )
+            };
+        }
+
+        async function logDisbursementAudit(actionType, recordId, newValues, oldValues) {
+            try {
+                await fetch('../api/audit.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    credentials: 'include',
+                    body: new URLSearchParams({
+                        action: 'log',
+                        table_name: 'disbursements',
+                        record_id: recordId || '',
+                        action_type: actionType,
+                        old_values: JSON.stringify(oldValues || {}),
+                        new_values: JSON.stringify(newValues || {})
+                    })
+                });
+            } catch (error) {
+                // Ignore audit write failures in the UI layer.
+            }
+        }
+
+        function getDisbursementSource(row) {
+            const ref = String(row.reference_number || '').toUpperCase();
+            const moduleSource = String(row.source_module || '').toLowerCase();
+            if (ref.startsWith('HR3-CLAIM-') || moduleSource === 'claims') {
+                return { label: 'Claims', badge: 'bg-info' };
+            }
+            if (ref.startsWith('PAYROLL-') || moduleSource === 'payroll') {
+                return { label: 'Payroll', badge: 'bg-success' };
+            }
+            if (ref.startsWith('INCENTIVE-') || moduleSource === 'incentives') {
+                return { label: 'Incentives', badge: 'bg-warning text-dark' };
+            }
+            if (moduleSource === 'ap') {
+                return { label: 'Accounts Payable', badge: 'bg-primary' };
+            }
+            return { label: 'Finance', badge: 'bg-secondary' };
+        }
+
+        function getDisbursementStatusBadge(status) {
+            const key = String(status || 'pending').toLowerCase();
+            const badgeMap = {
+                pending: 'bg-warning text-dark',
+                processed: 'bg-success',
+                approved: 'bg-success',
+                rejected: 'bg-danger',
+                paid: 'bg-success'
+            };
+            const label = key.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
+            return `<span class="badge ${badgeMap[key] || 'bg-secondary'}">${disbEscape(label)}</span>`;
+        }
+
+        function getDisbursementMethodBadge(method) {
+            const label = String(method || 'unknown').replace(/_/g, ' ').toUpperCase();
+            return `<span class="badge bg-light text-dark border">${disbEscape(label)}</span>`;
+        }
+
+        function renderDisbursementsTable(disbursements) {
+            const tbody = document.getElementById('disbursementsTableBody');
+            if (!tbody) {
+                return;
+            }
+
+            const refSearch = (document.getElementById('filterReferenceSearch')?.value || '').trim().toLowerCase();
+            const payeeName = (document.getElementById('filterPayeeName')?.value || '').trim().toLowerCase();
+            const department = document.getElementById('filterDepartment')?.value || '';
+            const filteredRows = (disbursements || []).filter(row => {
+                const refValue = String(row.disbursement_number || row.reference_number || row.id || '').toLowerCase();
+                const payeeValue = String(row.payee || '').toLowerCase();
+                const source = getDisbursementSource(row).label;
+                if (refSearch && !refValue.includes(refSearch)) {
+                    return false;
+                }
+                if (payeeName && !payeeValue.includes(payeeName)) {
+                    return false;
+                }
+                if (department && source !== department) {
+                    return false;
+                }
+                return true;
+            });
+
+            if (!filteredRows.length) {
+                disbVisibleRows = [];
+                tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">No matching disbursements found.</td></tr>';
+                return;
+            }
+
+            disbVisibleRows = filteredRows.slice();
+            tbody.innerHTML = filteredRows.map(row => {
+                const source = getDisbursementSource(row);
+                const canDelete = !(row.source === 'seed');
+                const checkbox = canDelete
+                    ? `<input type="checkbox" class="disbursement-checkbox" value="${row.id}" onchange="toggleSelection(this)">`
+                    : '<input type="checkbox" disabled title="Seed fallback records are retained for continuity">';
+                const actions = `
+                    <button class="btn btn-sm btn-outline-primary me-1" onclick="viewDisbursement('${row.id}')"><i class="fas fa-eye"></i></button>
+                    ${canDelete ? `<button class="btn btn-sm btn-outline-danger" onclick="deleteDisbursement('${row.id}')"><i class="fas fa-trash"></i></button>` : ''}
+                `;
+
+                return `
+                    <tr>
+                        <td>${checkbox}</td>
+                        <td>${disbEscape(row.disbursement_number || row.reference_number || row.id)}</td>
+                        <td>${disbEscape(row.payee || 'N/A')}</td>
+                        <td>${getDisbursementMethodBadge(row.payment_method)}</td>
+                        <td>${row.disbursement_date ? new Date(row.disbursement_date).toLocaleDateString() : 'N/A'}</td>
+                        <td><span class="amount-cell">${disbFormatMoney(row.amount)}</span></td>
+                        <td>${getDisbursementStatusBadge(row.status)}</td>
+                        <td><span class="badge ${source.badge}">${disbEscape(source.label)}</span></td>
+                        <td>${actions}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+        window.renderDisbursementsTable = renderDisbursementsTable;
+
+        async function fetchDisbursementRows() {
+            const params = new URLSearchParams(window.currentFilters || {});
+            const apiRows = await disbFetchJsonSafe(`../api/disbursements.php?${params.toString()}`, {
+                credentials: 'include'
+            });
+            const normalizedApiRows = Array.isArray(apiRows) ? apiRows.map(disbNormalizeRow) : [];
+            const fallbackRows = (window.FinancialHQState?.getDisbursements?.() || []).map(disbNormalizeRow);
+            disbMergedRows = disbMergeRecords(normalizedApiRows, fallbackRows);
+            return disbMergedRows;
+        }
+
+        window.loadDisbursements = async function() {
+            const rows = await fetchDisbursementRows();
+            renderDisbursementsTable(rows);
+            if (typeof populateStatusFilter === 'function') {
+                populateStatusFilter(rows);
+            }
+            window.loadDisbursementReports();
+        };
+
+        window.loadDisbursementReports = function() {
+            const rows = disbMergedRows.length ? disbMergedRows : (window.FinancialHQState?.getDisbursements?.() || []);
+            const totalCount = rows.length;
+            const totalAmount = rows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+            const pendingCount = rows.filter(row => String(row.status || '').toLowerCase() === 'pending').length;
+
+            const countEl = document.getElementById('totalDisbursementsCount');
+            const totalEl = document.getElementById('totalDisbursementsAmount');
+            const pendingEl = document.getElementById('pendingDisbursementsCount');
+            if (countEl) countEl.textContent = totalCount.toLocaleString();
+            if (totalEl) totalEl.textContent = disbFormatMoney(totalAmount);
+            if (pendingEl) pendingEl.textContent = pendingCount.toLocaleString();
+
+            const monthly = {};
+            rows.forEach(row => {
+                const month = row.disbursement_date
+                    ? new Date(row.disbursement_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short' })
+                    : 'Unknown';
+                monthly[month] = (monthly[month] || 0) + Number(row.amount || 0);
+            });
+
+            const canvas = document.getElementById('cashFlowChart');
+            if (canvas && window.Chart) {
+                if (Chart.getChart(canvas)) {
+                    Chart.getChart(canvas).destroy();
+                }
+                new Chart(canvas, {
+                    type: 'line',
+                    data: {
+                        labels: Object.keys(monthly),
+                        datasets: [{
+                            label: 'Disbursement Outflows',
+                            data: Object.values(monthly),
+                            borderColor: '#1e2936',
+                            backgroundColor: 'rgba(30, 41, 54, 0.12)',
+                            tension: 0.25,
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    callback: value => 'PHP ' + Number(value).toLocaleString()
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        };
+
+        window.applyFilters = async function() {
+            if (originalApplyFiltersFn) {
+                await originalApplyFiltersFn();
+            } else {
+                window.currentFilters = {
+                    status: document.getElementById('filterStatus')?.value || '',
+                    date_from: document.getElementById('filterDateFrom')?.value || '',
+                    date_to: document.getElementById('filterDateTo')?.value || '',
+                    reference_search: document.getElementById('filterReferenceSearch')?.value || '',
+                    payee_name: document.getElementById('filterPayeeName')?.value || '',
+                    department: document.getElementById('filterDepartment')?.value || ''
+                };
+                Object.keys(window.currentFilters).forEach(key => {
+                    if (!window.currentFilters[key]) {
+                        delete window.currentFilters[key];
+                    }
+                });
+                await window.loadDisbursements();
+            }
+            await logDisbursementAudit('filtered', '', {
+                detail: 'Applied disbursement table filters',
+                filters: window.currentFilters || {}
+            }, null);
+        };
+
+        window.clearFilters = function() {
+            if (originalClearFiltersFn) {
+                originalClearFiltersFn();
+            } else {
+                ['filterStatus', 'filterDateFrom', 'filterDateTo', 'filterReferenceSearch', 'filterPayeeName', 'filterDepartment'].forEach(id => {
+                    const field = document.getElementById(id);
+                    if (field) {
+                        field.value = '';
+                    }
+                });
+                window.currentFilters = {};
+                window.loadDisbursements();
+            }
+            logDisbursementAudit('filtered', '', {
+                detail: 'Cleared disbursement table filters'
+            }, null);
+        };
+
+        function showLocalDisbursementModal(row) {
+            const source = getDisbursementSource(row);
+            const wrapper = document.createElement('div');
+            wrapper.className = 'modal fade';
+            wrapper.innerHTML = `
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Disbursement Details</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="row">
+                                <div class="col-md-6 mb-3"><strong>Reference</strong><br>${disbEscape(row.disbursement_number || row.reference_number || row.id)}</div>
+                                <div class="col-md-6 mb-3"><strong>Source</strong><br><span class="badge ${source.badge}">${disbEscape(source.label)}</span></div>
+                                <div class="col-md-6 mb-3"><strong>Payee</strong><br>${disbEscape(row.payee || 'N/A')}</div>
+                                <div class="col-md-6 mb-3"><strong>Payment Method</strong><br>${disbEscape(String(row.payment_method || '').replace(/_/g, ' ').toUpperCase())}</div>
+                                <div class="col-md-6 mb-3"><strong>Amount</strong><br>${disbFormatMoney(row.amount)}</div>
+                                <div class="col-md-6 mb-3"><strong>Status</strong><br>${getDisbursementStatusBadge(row.status)}</div>
+                                <div class="col-md-12"><strong>Notes</strong><br>${disbEscape(row.notes || row.purpose || 'No additional notes')}</div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(wrapper);
+            const modal = new bootstrap.Modal(wrapper);
+            modal.show();
+            wrapper.addEventListener('hidden.bs.modal', function() {
+                wrapper.remove();
+            });
+        }
+
+        window.viewDisbursement = async function(id) {
+            const seedRow = disbMergedRows.find(item => String(item.id) === String(id) && item.source === 'seed');
+            if (seedRow) {
+                showLocalDisbursementModal(seedRow);
+                await logDisbursementAudit('viewed', id, {
+                    disbursement_number: seedRow.disbursement_number,
+                    reference_number: seedRow.reference_number,
+                    detail: 'Viewed local fallback disbursement'
+                }, null);
+                window.loadAuditTrail();
+                return;
+            }
+
+            const apiRow = await disbFetchJsonSafe(`../api/disbursements.php?id=${encodeURIComponent(id)}`, {
+                credentials: 'include'
+            });
+            if (apiRow && !Array.isArray(apiRow) && !apiRow.error) {
+                showLocalDisbursementModal(disbNormalizeRow(apiRow));
+                await logDisbursementAudit('viewed', id, {
+                    disbursement_number: apiRow.disbursement_number || id,
+                    reference_number: apiRow.reference_number || '',
+                    detail: 'Viewed disbursement record'
+                }, null);
+                window.loadAuditTrail();
+                return;
+            }
+
+            showAlert('Unable to load disbursement details.', 'danger');
+        };
+
+        window.deleteDisbursement = async function(id) {
+            const seedRow = disbMergedRows.find(item => String(item.id) === String(id) && item.source === 'seed');
+            if (seedRow) {
+                showAlert('Fallback disbursement records are retained for continuity and cannot be deleted.', 'warning');
+                return;
+            }
+
+            showConfirmDialog(
+                'Delete Disbursement',
+                'Are you sure you want to delete this disbursement?',
+                async () => {
+                    try {
+                        const response = await fetch(`../api/disbursements.php?id=${encodeURIComponent(id)}`, {
+                            method: 'DELETE',
+                            credentials: 'include'
+                        });
+                        const result = await response.json();
+                        if (!response.ok || result.error) {
+                            throw new Error(result.error || 'Delete failed');
+                        }
+                        await logDisbursementAudit('deleted', id, null, { detail: 'Deleted disbursement record' });
+                        showAlert('Disbursement deleted successfully.', 'success');
+                        await window.loadDisbursements();
+                        window.loadAuditTrail();
+                    } catch (error) {
+                        showAlert('Error deleting disbursement: ' + error.message, 'danger');
+                    }
+                }
+            );
+        };
+
+        window.saveDisbursement = async function() {
+            const form = document.getElementById('disbursementForm');
+            const formData = new FormData(form);
+            const data = Object.fromEntries(formData);
+            const vendorSelect = document.getElementById('vendorId');
+            const payee = vendorSelect?.options?.[vendorSelect.selectedIndex]?.text || '';
+
+            const payload = {
+                payee: payee,
+                disbursement_date: data.disbursement_date,
+                amount: Number(data.amount || 0),
+                payment_method: data.payment_method,
+                reference_number: data.reference_number || '',
+                purpose: data.notes || '',
+                notes: data.notes || '',
+                bill_id: data.bill_id || ''
+            };
+
+            if (!payload.payee || !payload.disbursement_date || !payload.amount || !payload.payment_method) {
+                showAlert('Please complete the disbursement form.', 'warning');
+                return;
+            }
+
+            try {
+                const isUpdate = Boolean(data.disbursement_id);
+                const response = await fetch(isUpdate
+                    ? `../api/disbursements.php?id=${encodeURIComponent(data.disbursement_id)}`
+                    : '../api/disbursements.php', {
+                    method: isUpdate ? 'PUT' : 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        ...payload,
+                        disbursement_id: data.disbursement_id || ''
+                    })
+                });
+                const result = await response.json();
+                if (!response.ok || result.error) {
+                    throw new Error(result.error || 'Save failed');
+                }
+                await logDisbursementAudit(isUpdate ? 'updated' : 'created', result.id || data.disbursement_id || '', payload, null);
+                bootstrap.Modal.getInstance(document.getElementById('disbursementModal'))?.hide();
+                showAlert(result.message || 'Disbursement saved successfully.', 'success');
+                await window.loadDisbursements();
+                window.loadAuditTrail();
+            } catch (error) {
+                const fallback = window.FinancialHQState?.addDisbursement?.({
+                    ...payload,
+                    status: 'pending',
+                    source_module: 'manual',
+                    source: 'seed'
+                });
+                await logDisbursementAudit('created', '', payload, null);
+                bootstrap.Modal.getInstance(document.getElementById('disbursementModal'))?.hide();
+                showAlert('Saved to fallback finance queue while the API is unavailable.', 'warning');
+                await window.loadDisbursements();
+                window.loadAuditTrail();
+            }
+        };
+
+        function renderClaimsFallback(rows) {
+            const tbody = document.getElementById('claimsTableBody');
+            if (!tbody) {
+                return;
+            }
+
+            const activeRows = rows.filter(item => !['paid', 'processed', 'rejected', 'cancelled'].includes(String(item.status || '').toLowerCase()));
+            if (!activeRows.length) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">All fallback claims are already processed.</td></tr>';
+                window.updateTabBadge?.('claims-tab', 0);
+                return;
+            }
+
+            tbody.innerHTML = activeRows.map(claim => `
+                <tr>
+                    <td><strong>${disbEscape(claim.claim_id || claim.id)}</strong></td>
+                    <td>${disbEscape(claim.employee_name || 'N/A')}</td>
+                    <td><span class="badge bg-success">Approved</span></td>
+                    <td><strong>${disbFormatMoney(claim.amount || 0)}</strong></td>
+                    <td>${claim.submitted_at ? new Date(claim.submitted_at).toLocaleDateString() : 'N/A'}</td>
+                    <td>${disbEscape(claim.claim_type || 'HR Claim')}</td>
+                    <td><button class="btn btn-success btn-sm" onclick='processHR3Claim(${JSON.stringify(claim.claim_id || claim.id)}, ${JSON.stringify(claim.employee_name || '')}, ${Number(claim.amount || 0)}, ${JSON.stringify(claim.claim_type || 'HR Claim')}, "PHP")'><i class="fas fa-money-bill-wave me-1"></i>Process</button></td>
+                </tr>
+            `).join('');
+            window.updateTabBadge?.('claims-tab', activeRows.length);
+        }
+
+        window.loadClaims = async function(buttonEl) {
+            const button = buttonEl && buttonEl.closest ? buttonEl.closest('button') : document.querySelector('button[onclick="loadClaims()"]');
+            const originalText = button ? button.innerHTML : '';
+            if (button) {
+                button.disabled = true;
+                button.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Loading Claims...';
+            }
+
+            try {
+                const response = await fetch('../api/integrations.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    credentials: 'include',
+                    body: new URLSearchParams({
+                        action: 'execute',
+                        integration_name: 'hr3',
+                        action_name: 'getApprovedClaims'
+                    })
+                });
+                const result = await response.json();
+                const payload = result.result || result.data || result;
+                const rows = Array.isArray(payload) ? payload : (Array.isArray(payload?.claims) ? payload.claims : []);
+
+                if (response.ok && result.success && rows.length) {
+                    if (typeof window.displayHR3Claims === 'function') {
+                        window.displayHR3Claims(rows);
+                    }
+                    logDisbursementAudit('viewed', '', { detail: 'Loaded HR3 claims queue from live integration' }, null);
+                } else {
+                    renderClaimsFallback(window.FinancialHQState?.getHrClaims?.() || []);
+                    showAlert('Using fallback claims queue while the HR3 API is unavailable.', 'warning');
+                    logDisbursementAudit('viewed', '', { detail: 'Loaded fallback HR3 claims queue' }, null);
+                }
+            } catch (error) {
+                renderClaimsFallback(window.FinancialHQState?.getHrClaims?.() || []);
+                showAlert('Using fallback claims queue while the HR3 API is unavailable.', 'warning');
+                logDisbursementAudit('viewed', '', { detail: 'Loaded fallback HR3 claims queue' }, null);
+            } finally {
+                if (button) {
+                    button.disabled = false;
+                    button.innerHTML = originalText;
+                }
+            }
+        };
+
+        window.processHR3Claim = async function(claimId, employeeName, amount, description, currency) {
+            const seedClaim = (window.FinancialHQState?.getHrClaims?.() || []).find(item => {
+                return String(item.id) === String(claimId) || String(item.claim_id) === String(claimId);
+            });
+            if (!seedClaim || seedClaim.source !== 'seed') {
+                if (originalProcessClaimFn) {
+                    return originalProcessClaimFn(claimId, employeeName, amount, description, currency);
+                }
+                return;
+            }
+
+            window.FinancialHQState?.updateHrClaimStatus?.(claimId, 'paid');
+            const state = window.FinancialHQState?.addDisbursement?.({
+                payee: employeeName,
+                disbursement_date: new Date().toISOString().slice(0, 10),
+                amount: amount,
+                payment_method: 'bank_transfer',
+                reference_number: `HR3-CLAIM-${claimId}`,
+                notes: `Processed HR3 fallback claim for ${employeeName}`,
+                status: 'processed',
+                source_module: 'claims',
+                source: 'seed'
+            });
+            await logDisbursementAudit('processed_payment', claimId, {
+                employee: employeeName,
+                amount: amount,
+                reference_number: `HR3-CLAIM-${claimId}`
+            }, { status: 'approved' });
+            showAlert('Claim processed successfully through the fallback queue.', 'success');
+            window.loadClaims();
+            window.loadDisbursements();
+            window.loadAuditTrail();
+        };
+
+        function renderPayrollFallback(rows) {
+            const tbody = document.getElementById('payrollTableBody');
+            if (!tbody) {
+                return;
+            }
+
+            const activeRows = rows.filter(item => !['approved', 'paid', 'rejected'].includes(String(item.status || '').toLowerCase()));
+            if (!activeRows.length) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No payroll batches waiting for finance action.</td></tr>';
+                window.updateTabBadge?.('payroll-tab', 0);
+                return;
+            }
+
+            tbody.innerHTML = activeRows.map(row => `
+                <tr data-payroll-id="${disbEscape(row.approval_id || row.id)}" data-period="${disbEscape(row.period_display || row.payroll_period || '')}" data-amount="${Number(row.total_amount || 0)}" data-employees="${Number(row.employee_count || 0)}" data-submitted-by="${disbEscape(row.submitted_by || 'Compensation Team')}">
+                    <td><strong>${disbEscape(row.period_display || row.payroll_period || 'N/A')}</strong></td>
+                    <td>${disbFormatMoney(row.total_amount || 0)}</td>
+                    <td>${Number(row.employee_count || 0).toLocaleString()}</td>
+                    <td>${disbEscape(row.submitted_by || 'Compensation Team')}</td>
+                    <td>${row.submitted_at ? new Date(row.submitted_at).toLocaleString() : 'N/A'}</td>
+                    <td><span class="badge bg-info">${disbEscape(row.status || 'pending')}</span></td>
+                    <td>
+                        <button class="btn btn-success btn-sm me-2" onclick="updatePayrollApproval(this, '${disbEscape(row.approval_id || row.id)}', 'approve')"><i class="fas fa-check me-1"></i>Approve</button>
+                        <button class="btn btn-danger btn-sm" onclick="updatePayrollApproval(this, '${disbEscape(row.approval_id || row.id)}', 'reject')"><i class="fas fa-times me-1"></i>Reject</button>
+                    </td>
+                </tr>
+            `).join('');
+            window.updateTabBadge?.('payroll-tab', activeRows.length);
+        }
+
+        window.loadPayroll = async function(buttonEl) {
+            const button = buttonEl && buttonEl.closest ? buttonEl.closest('button') : document.querySelector('button[onclick*="loadPayroll"]');
+            const originalText = button ? button.innerHTML : '';
+            if (button) {
+                button.disabled = true;
+                button.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Loading Payroll...';
+            }
+            try {
+                const response = await fetch('../api/integrations.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    credentials: 'include',
+                    body: new URLSearchParams({
+                        action: 'execute',
+                        integration_name: 'hr4',
+                        action_name: 'getPayrollApprovals',
+                        params: JSON.stringify({ _ts: Date.now() })
+                    })
+                });
+                const result = await response.json();
+                const rows = Array.isArray(result?.result) ? result.result : [];
+                if (response.ok && result.success && rows.length) {
+                    window.displayHR4Payroll?.(rows);
+                    logDisbursementAudit('viewed', '', { detail: 'Loaded HR4 payroll queue from live integration' }, null);
+                } else {
+                    renderPayrollFallback(window.FinancialHQState?.getHrPayroll?.() || []);
+                    showAlert('Using fallback payroll queue while the HR4 API is unavailable.', 'warning');
+                    logDisbursementAudit('viewed', '', { detail: 'Loaded fallback HR4 payroll queue' }, null);
+                }
+            } catch (error) {
+                renderPayrollFallback(window.FinancialHQState?.getHrPayroll?.() || []);
+                showAlert('Using fallback payroll queue while the HR4 API is unavailable.', 'warning');
+                logDisbursementAudit('viewed', '', { detail: 'Loaded fallback HR4 payroll queue' }, null);
+            } finally {
+                if (button) {
+                    button.disabled = false;
+                    button.innerHTML = originalText;
+                }
+            }
+        };
+
+        window.updatePayrollApproval = async function(buttonEl, payrollId, action) {
+            const seedPayroll = (window.FinancialHQState?.getHrPayroll?.() || []).find(item => {
+                return String(item.id) === String(payrollId) || String(item.approval_id) === String(payrollId);
+            });
+            if (!seedPayroll || seedPayroll.source !== 'seed') {
+                if (originalUpdatePayrollApprovalFn) {
+                    return originalUpdatePayrollApprovalFn(buttonEl, payrollId, action);
+                }
+                return;
+            }
+
+            window.FinancialHQState?.updateHrPayrollStatus?.(payrollId, action === 'approve' ? 'approved' : 'rejected');
+            if (action === 'approve') {
+                window.FinancialHQState?.addDisbursement?.({
+                    payee: `Payroll ${seedPayroll.period_display || seedPayroll.payroll_period}`,
+                    disbursement_date: new Date().toISOString().slice(0, 10),
+                    amount: seedPayroll.total_amount,
+                    payment_method: 'bank_transfer',
+                    reference_number: `PAYROLL-${payrollId}`,
+                    notes: `Approved fallback payroll batch for ${seedPayroll.employee_count} employees`,
+                    status: 'processed',
+                    source_module: 'payroll',
+                    source: 'seed'
+                });
+            }
+            await logDisbursementAudit('processed_payment', payrollId, {
+                payroll_period: seedPayroll.period_display || seedPayroll.payroll_period,
+                amount: seedPayroll.total_amount,
+                action: action
+            }, { status: seedPayroll.status || 'pending' });
+            showAlert(`Payroll batch ${action === 'approve' ? 'approved' : 'rejected'} successfully.`, 'success');
+            window.loadPayroll();
+            window.loadDisbursements();
+            window.loadAuditTrail();
+        };
+
+        function renderIncentivesFallback(rows) {
+            const tbody = document.getElementById('incentivesTableBody');
+            if (!tbody) {
+                return;
+            }
+            const activeRows = rows.filter(item => !['approved', 'paid', 'rejected'].includes(String(item.status || '').toLowerCase()));
+            if (!activeRows.length) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No incentive batches waiting for finance action.</td></tr>';
+                window.updateTabBadge?.('incentives-tab', 0);
+                return;
+            }
+
+            tbody.innerHTML = activeRows.map(row => `
+                <tr data-incentive-id="${disbEscape(row.id)}" data-period="${disbEscape(row.period || '')}" data-amount="${Number(row.amount || 0)}" data-employee-name="${disbEscape(row.employee_name || '')}" data-department="${disbEscape(row.department || '')}" data-position="${disbEscape(row.position || '')}">
+                    <td><strong>${disbEscape(row.employee_name || 'N/A')}</strong></td>
+                    <td>${disbEscape(row.department || 'N/A')}</td>
+                    <td>${disbEscape(row.position || 'N/A')}</td>
+                    <td>${disbEscape(row.period || 'N/A')}</td>
+                    <td><strong class="text-success">${disbFormatMoney(row.amount || 0)}</strong></td>
+                    <td><span class="badge bg-info">${disbEscape(row.status || 'pending')}</span></td>
+                    <td>
+                        <button class="btn btn-success btn-sm me-2" onclick="updateIncentiveApproval(this, '${disbEscape(row.id)}', 'approve')"><i class="fas fa-check me-1"></i>Approve</button>
+                        <button class="btn btn-danger btn-sm" onclick="updateIncentiveApproval(this, '${disbEscape(row.id)}', 'reject')"><i class="fas fa-times me-1"></i>Reject</button>
+                    </td>
+                </tr>
+            `).join('');
+            window.updateTabBadge?.('incentives-tab', activeRows.length);
+        }
+
+        window.loadIncentives = async function(buttonEl) {
+            const button = buttonEl && buttonEl.closest ? buttonEl.closest('button') : document.querySelector('button[onclick*="loadIncentives"]');
+            const originalText = button ? button.innerHTML : '';
+            if (button) {
+                button.disabled = true;
+                button.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Loading Incentives...';
+            }
+            try {
+                const response = await fetch('../api/integrations.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    credentials: 'include',
+                    body: new URLSearchParams({
+                        action: 'execute',
+                        integration_name: 'hr4',
+                        action_name: 'getIncentiveData',
+                        params: JSON.stringify({ _ts: Date.now() })
+                    })
+                });
+                const result = await response.json();
+                const rows = Array.isArray(result?.result) ? result.result : [];
+                if (response.ok && result.success && rows.length) {
+                    window.displayHR4Incentives?.(rows);
+                    logDisbursementAudit('viewed', '', { detail: 'Loaded HR4 incentives queue from live integration' }, null);
+                } else {
+                    renderIncentivesFallback(window.FinancialHQState?.getHrIncentives?.() || []);
+                    showAlert('Using fallback incentives queue while the HR4 API is unavailable.', 'warning');
+                    logDisbursementAudit('viewed', '', { detail: 'Loaded fallback HR4 incentives queue' }, null);
+                }
+            } catch (error) {
+                renderIncentivesFallback(window.FinancialHQState?.getHrIncentives?.() || []);
+                showAlert('Using fallback incentives queue while the HR4 API is unavailable.', 'warning');
+                logDisbursementAudit('viewed', '', { detail: 'Loaded fallback HR4 incentives queue' }, null);
+            } finally {
+                if (button) {
+                    button.disabled = false;
+                    button.innerHTML = originalText;
+                }
+            }
+        };
+
+        window.updateIncentiveApproval = async function(buttonEl, incentiveId, action) {
+            const seedIncentive = (window.FinancialHQState?.getHrIncentives?.() || []).find(item => String(item.id) === String(incentiveId));
+            if (!seedIncentive || seedIncentive.source !== 'seed') {
+                if (originalUpdateIncentiveApprovalFn) {
+                    return originalUpdateIncentiveApprovalFn(buttonEl, incentiveId, action);
+                }
+                return;
+            }
+
+            window.FinancialHQState?.updateHrIncentiveStatus?.(incentiveId, action === 'approve' ? 'approved' : 'rejected');
+            if (action === 'approve') {
+                window.FinancialHQState?.addDisbursement?.({
+                    payee: `Incentive - ${seedIncentive.employee_name}`,
+                    disbursement_date: new Date().toISOString().slice(0, 10),
+                    amount: seedIncentive.amount,
+                    payment_method: 'bank_transfer',
+                    reference_number: `INCENTIVE-${incentiveId}`,
+                    notes: `Approved fallback incentive payout for ${seedIncentive.employee_name}`,
+                    status: 'processed',
+                    source_module: 'incentives',
+                    source: 'seed'
+                });
+            }
+            await logDisbursementAudit('processed_payment', incentiveId, {
+                employee: seedIncentive.employee_name,
+                amount: seedIncentive.amount,
+                action: action
+            }, { status: seedIncentive.status || 'pending' });
+            showAlert(`Incentive ${action === 'approve' ? 'approved' : 'rejected'} successfully.`, 'success');
+            window.loadIncentives();
+            window.loadDisbursements();
+            window.loadAuditTrail();
+        };
+
+        function renderAuditRows(logs) {
+            const tbody = document.getElementById('auditTableBody');
+            if (!tbody) {
+                return;
+            }
+            disbAuditLogs = Array.isArray(logs) ? logs : [];
+
+            if (!disbAuditLogs.length) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No audit logs found.</td></tr>';
+                window.updateTabBadge?.('audit-tab', 0);
+                return;
+            }
+
+            const actions = new Set();
+            const users = new Set();
+            disbAuditLogs.forEach(log => {
+                actions.add(String(log.action_label || log.action || '').trim());
+                users.add(String(log.full_name || log.username || 'Unknown').trim());
+            });
+
+            const actionSelect = document.getElementById('disbFilterAction');
+            if (actionSelect) {
+                const first = actionSelect.querySelector('option');
+                actionSelect.innerHTML = '';
+                if (first) {
+                    actionSelect.appendChild(first);
+                } else {
+                    actionSelect.innerHTML = '<option value="">All Actions</option>';
+                }
+                Array.from(actions).filter(Boolean).sort().forEach(action => {
+                    const opt = document.createElement('option');
+                    opt.value = action;
+                    opt.textContent = action;
+                    actionSelect.appendChild(opt);
+                });
+            }
+
+            const userList = document.getElementById('disbFilterUserList');
+            if (userList) {
+                userList.innerHTML = '';
+                Array.from(users).filter(Boolean).sort().forEach(user => {
+                    const opt = document.createElement('option');
+                    opt.value = user;
+                    userList.appendChild(opt);
+                });
+            }
+
+            tbody.innerHTML = disbAuditLogs.map(log => {
+                const ref = log.disbursement_number
+                    || log.record_id
+                    || (() => {
+                        try {
+                            const next = log.new_values ? JSON.parse(log.new_values) : {};
+                            return next.disbursement_number || next.reference_number || next.employee || 'N/A';
+                        } catch (error) {
+                            return 'N/A';
+                        }
+                    })();
+                return `
+                    <tr>
+                        <td>${disbEscape(log.formatted_date || new Date(log.created_at || Date.now()).toLocaleString())}</td>
+                        <td>${disbEscape(log.full_name || log.username || 'Unknown')}</td>
+                        <td><span class="badge bg-info">${disbEscape(log.action_label || log.action || 'N/A')}</span></td>
+                        <td>${disbEscape(ref)}</td>
+                        <td>${disbEscape(log.action_description || '')}</td>
+                    </tr>
+                `;
+            }).join('');
+            window.updateTabBadge?.('audit-tab', disbAuditLogs.length);
+        }
+
+        function getFilteredAuditRows() {
+            const dateFrom = document.getElementById('disbFilterDateFrom')?.value || '';
+            const dateTo = document.getElementById('disbFilterDateTo')?.value || '';
+            const user = (document.getElementById('disbFilterUser')?.value || '').toLowerCase();
+            const action = document.getElementById('disbFilterAction')?.value || '';
+            const ref = (document.getElementById('disbFilterRef')?.value || '').toLowerCase();
+
+            return disbAuditLogs.filter(log => {
+                const createdAt = String(log.created_at || '');
+                const formatted = String(log.formatted_date || '');
+                const logUser = String(log.full_name || log.username || '').toLowerCase();
+                const logAction = String(log.action_label || log.action || '');
+                const logRef = String(log.disbursement_number || log.record_id || log.action_description || '').toLowerCase();
+
+                if (dateFrom && createdAt.slice(0, 10) < dateFrom) return false;
+                if (dateTo && createdAt.slice(0, 10) > dateTo) return false;
+                if (user && !logUser.includes(user)) return false;
+                if (action && logAction !== action) return false;
+                if (ref && !logRef.includes(ref) && !formatted.toLowerCase().includes(ref)) return false;
+                return true;
+            });
+        }
+
+        window.applyDisbursementFilters = function() {
+            renderAuditRows(getFilteredAuditRows());
+        };
+
+        window.clearDisbursementFilters = function() {
+            document.getElementById('disbFilterDateFrom').value = '';
+            document.getElementById('disbFilterDateTo').value = '';
+            document.getElementById('disbFilterUser').value = '';
+            document.getElementById('disbFilterAction').value = '';
+            document.getElementById('disbFilterRef').value = '';
+            renderAuditRows(disbAuditLogs);
+        };
+
+        window.exportDisbursementAudit = function() {
+            const rows = getFilteredAuditRows();
+            if (!rows.length) {
+                showAlert('No audit logs available for export.', 'warning');
+                return;
+            }
+
+            const csv = [
+                ['Date/Time', 'User', 'Action', 'Reference', 'Details'].join(','),
+                ...rows.map(log => [
+                    log.formatted_date || new Date(log.created_at || Date.now()).toLocaleString(),
+                    log.full_name || log.username || 'Unknown',
+                    log.action_label || log.action || '',
+                    log.disbursement_number || log.record_id || '',
+                    log.action_description || ''
+                ].map(value => `"${String(value ?? '').replace(/"/g, '""')}"`).join(','))
+            ].join('\n');
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `disbursement_audit_${new Date().toISOString().slice(0, 10)}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            logDisbursementAudit('exported', '', { detail: 'Exported filtered disbursement audit log' }, null);
+        };
+
+        window.loadAuditTrail = async function() {
+            const logs = await disbFetchJsonSafe('../api/audit.php?scope=disbursements', {
+                credentials: 'include'
+            });
+            renderAuditRows(Array.isArray(logs) ? logs : []);
+        };
+
+        window.exportDisbursementReport = function() {
+            const rows = disbVisibleRows.length ? disbVisibleRows : (disbMergedRows.length ? disbMergedRows : (window.FinancialHQState?.getDisbursements?.() || []));
+            if (!rows.length) {
+                showAlert('No disbursement records available for export.', 'warning');
+                return;
+            }
+
+            const csv = [
+                ['Disbursement #', 'Payee', 'Payment Method', 'Date', 'Amount', 'Status', 'Source'].join(','),
+                ...rows.map(row => [
+                    row.disbursement_number || row.reference_number || row.id,
+                    row.payee || 'N/A',
+                    row.payment_method || '',
+                    row.disbursement_date || '',
+                    Number(row.amount || 0).toFixed(2),
+                    row.status || '',
+                    getDisbursementSource(row).label
+                ].map(value => `"${String(value ?? '').replace(/"/g, '""')}"`).join(','))
+            ].join('\n');
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `disbursements_${new Date().toISOString().slice(0, 10)}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            logDisbursementAudit('exported', '', { detail: 'Exported disbursement report' }, null);
+        };
+
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('logistics-tab')?.closest('.nav-item')?.remove();
+            document.getElementById('logistics')?.remove();
+
+            const payrollTab = document.getElementById('payroll-tab');
+            if (payrollTab) {
+                payrollTab.childNodes.forEach(node => {
+                    if (node.nodeType === Node.TEXT_NODE) {
+                        node.textContent = node.textContent.replace(/\(\d+\)/g, '');
+                    }
+                });
+            }
+
+            const auditPanel = document.getElementById('disbFiltersInline');
+            if (auditPanel) {
+                auditPanel.style.display = 'block';
+            }
+            document.getElementById('disbFilterToggleBtn')?.remove();
+
+            const reportsHeaderButton = document.querySelector('#reports .btn.btn-outline-secondary');
+            if (reportsHeaderButton) {
+                reportsHeaderButton.setAttribute('type', 'button');
+                reportsHeaderButton.setAttribute('onclick', 'exportDisbursementReport()');
+            }
+
+            const auditHeader = document.querySelector('#audit .d-flex.justify-content-between.align-items-center.mb-3');
+            if (auditHeader && !document.getElementById('disbAuditExportBtn')) {
+                const exportBtn = document.createElement('button');
+                exportBtn.className = 'btn btn-outline-secondary';
+                exportBtn.id = 'disbAuditExportBtn';
+                exportBtn.type = 'button';
+                exportBtn.innerHTML = '<i class="fas fa-download me-2"></i>Export Audit';
+                exportBtn.addEventListener('click', window.exportDisbursementAudit);
+                auditHeader.appendChild(exportBtn);
+            }
+
+            document.getElementById('disbFilterDateFrom')?.addEventListener('change', window.applyDisbursementFilters);
+            document.getElementById('disbFilterDateTo')?.addEventListener('change', window.applyDisbursementFilters);
+            document.getElementById('disbFilterUser')?.addEventListener('input', window.applyDisbursementFilters);
+            document.getElementById('disbFilterAction')?.addEventListener('change', window.applyDisbursementFilters);
+            document.getElementById('disbFilterRef')?.addEventListener('input', window.applyDisbursementFilters);
+        });
+    })();
+    </script>
+
     <!-- Privacy Mode - Hide amounts with asterisks + Eye button -->
     <script src="../includes/privacy_mode.js?v=12"></script>
 

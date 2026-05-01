@@ -612,26 +612,32 @@ function buildMonthlyHistory(array $rows, $months) {
 }
 
 function getForecastData($db) {
-    // Return historical monthly totals for client-side forecasting (TF.js)
+    // Return historical monthly totals plus source lineage for client-side forecasting.
     $months = clampForecastMonths($_GET['months'] ?? 36);
+    $category = strtolower(trim((string)($_GET['category'] ?? 'combined')));
+    $allowedCategories = ['combined', 'disbursements', 'payments_made'];
+    if (!in_array($category, $allowedCategories, true)) {
+        $category = 'combined';
+    }
+
     $endMonth = new DateTimeImmutable(date('Y-m-01'));
     $startDate = $endMonth->modify('-' . max($months - 1, 0) . ' months')->format('Y-m-01');
     $endDate = date('Y-m-d');
 
     $query = "
-        SELECT month, SUM(amount) as amount FROM (
-            SELECT DATE_FORMAT(disbursement_date, '%Y-%m-01') as month, amount
+        SELECT month, source, SUM(amount) as amount, COUNT(*) as entries FROM (
+            SELECT DATE_FORMAT(disbursement_date, '%Y-%m-01') as month, amount, 'disbursements' as source
             FROM disbursements
             WHERE disbursement_date IS NOT NULL
               AND disbursement_date BETWEEN ? AND ?
             UNION ALL
-            SELECT DATE_FORMAT(payment_date, '%Y-%m-01') as month, amount
+            SELECT DATE_FORMAT(payment_date, '%Y-%m-01') as month, amount, 'payments_made' as source
             FROM payments_made
             WHERE payment_date IS NOT NULL
               AND payment_date BETWEEN ? AND ?
         ) t
-        GROUP BY month
-        ORDER BY month ASC
+        GROUP BY month, source
+        ORDER BY month ASC, source ASC
     ";
 
     $stmt = $db->prepare($query);
@@ -643,19 +649,107 @@ function getForecastData($db) {
         return;
     }
 
-    $history = buildMonthlyHistory($rows, $months);
+    $monthSourceMap = [];
+    $sourceTotals = [
+        'disbursements' => 0.0,
+        'payments_made' => 0.0
+    ];
+    $sourceEntries = [
+        'disbursements' => 0,
+        'payments_made' => 0
+    ];
+
+    foreach ($rows as $row) {
+        $monthKey = date('Y-m-01', strtotime((string)$row['month']));
+        $sourceKey = $row['source'];
+        $amount = (float)($row['amount'] ?? 0);
+        $entries = (int)($row['entries'] ?? 0);
+
+        if (!isset($monthSourceMap[$monthKey])) {
+            $monthSourceMap[$monthKey] = [
+                'disbursements' => 0.0,
+                'payments_made' => 0.0
+            ];
+        }
+
+        $monthSourceMap[$monthKey][$sourceKey] = $amount;
+        $sourceTotals[$sourceKey] += $amount;
+        $sourceEntries[$sourceKey] += $entries;
+    }
+
+    $history = [];
+    $endCursor = new DateTimeImmutable(date('Y-m-01'));
+    $startCursor = $endCursor->modify('-' . max($months - 1, 0) . ' months');
+    for ($cursor = $startCursor; $cursor->getTimestamp() <= $endCursor->getTimestamp(); $cursor = $cursor->modify('+1 month')) {
+        $monthKey = $cursor->format('Y-m-01');
+        $breakdown = $monthSourceMap[$monthKey] ?? [
+            'disbursements' => 0.0,
+            'payments_made' => 0.0
+        ];
+
+        $selectedValue = 0.0;
+        if ($category === 'disbursements') {
+            $selectedValue = (float)$breakdown['disbursements'];
+        } elseif ($category === 'payments_made') {
+            $selectedValue = (float)$breakdown['payments_made'];
+        } else {
+            $selectedValue = (float)$breakdown['disbursements'] + (float)$breakdown['payments_made'];
+        }
+
+        $history[] = [
+            'date' => $monthKey,
+            'value' => $selectedValue,
+            'source_breakdown' => $breakdown
+        ];
+    }
 
     // summary
     $total = 0;
     foreach ($history as $h) $total += $h['value'];
     $avg = count($history) ? $total / count($history) : 0;
 
+    $drivers = [];
+    $sourceLabels = [
+        'disbursements' => 'Disbursements',
+        'payments_made' => 'Payments Made'
+    ];
+    foreach ($sourceLabels as $sourceKey => $label) {
+        $recent = array_slice(array_map(function ($item) use ($sourceKey) {
+            return (float)($item['source_breakdown'][$sourceKey] ?? 0);
+        }, $history), -3);
+
+        $drivers[] = [
+            'source' => $sourceKey,
+            'label' => $label,
+            'total' => (float)$sourceTotals[$sourceKey],
+            'average_monthly' => count($history) ? (float)$sourceTotals[$sourceKey] / count($history) : 0,
+            'recent_average' => count($recent) ? array_sum($recent) / count($recent) : 0,
+            'entries' => (int)$sourceEntries[$sourceKey],
+            'share_percent' => $total > 0 ? ((float)$sourceTotals[$sourceKey] / $total) * 100 : 0
+        ];
+    }
+
     echo json_encode([
         'history' => $history,
         'summary' => [
             'months' => count($history),
             'total' => (float)$total,
-            'average_monthly' => (float)$avg
+            'average_monthly' => (float)$avg,
+            'selected_category' => $category,
+            'source_totals' => $sourceTotals
+        ],
+        'drivers' => $drivers,
+        'lineage' => [
+            [
+                'source' => 'disbursements',
+                'label' => 'Disbursements',
+                'description' => 'Posted outflows recorded in the Disbursements module.'
+            ],
+            [
+                'source' => 'payments_made',
+                'label' => 'Payments Made',
+                'description' => 'Operational and vendor payments captured in AP workflows.'
+            ]
         ],
         'method' => 'history_only'
     ]);
