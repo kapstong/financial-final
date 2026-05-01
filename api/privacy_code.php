@@ -101,20 +101,40 @@ try {
  */
 function handleCheckMethod($user) {
     try {
-        $totpConfig = getTotpConfigForUser((int)($user['id'] ?? 0));
-        if (!$totpConfig) {
+        $db = Database::getInstance()->getConnection();
+        $stmt = $db->prepare("SELECT method FROM user_2fa WHERE user_id = ? AND is_enabled = 1 ORDER BY created_at DESC LIMIT 1");
+        $stmt->execute([(int)($user['id'] ?? 0)]);
+        $config = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$config) {
             http_response_code(400);
             echo json_encode([
                 'success' => false,
-                'error' => 'Authenticator verification is not configured for this account. Enable TOTP in Profile Settings first.'
+                'error' => 'Verification is not configured for this account.'
             ]);
+            return;
+        }
+
+        // For systems that previously used TOTP we now use email codes
+        $method = ($config['method'] === 'totp') ? 'email' : $config['method'];
+
+        // If the request intended to send a code, send it now
+        $action = $_GET['action'] ?? $_POST['action'] ?? '';
+        if ($action === 'send_code') {
+            $twoFactor = TwoFactorAuth::getInstance();
+            $res = $twoFactor->generateAndSendEmailCode((int)$user['id']);
+            if ($res['success']) {
+                echo json_encode(['success' => true, 'method' => $method, 'message' => 'Verification code sent to your email.']);
+            } else {
+                http_response_code(500);
+                echo json_encode(['success' => false, 'error' => $res['error'] ?? 'Failed to send code']);
+            }
             return;
         }
 
         echo json_encode([
             'success' => true,
-            'method' => 'totp',
-            'message' => 'Use the current 6-digit code from your authenticator app.'
+            'method' => $method,
+            'message' => $method === 'email' ? 'A 6-digit code will be sent to your email.' : 'Use your configured verification method.'
         ]);
 
     } catch (Exception $e) {
@@ -136,15 +156,9 @@ function handleVerifyCode($user) {
             return;
         }
 
-        $totpConfig = getTotpConfigForUser((int)($user['id'] ?? 0));
-        if (!$totpConfig) {
-            http_response_code(400);
-            echo json_encode(['error' => 'Authenticator verification is not configured for this account']);
-            return;
-        }
-
         $twoFactor = TwoFactorAuth::getInstance();
-        if ($twoFactor->verifyTOTPCode($totpConfig['secret'], $code, 1)) {
+        $result = $twoFactor->verify2FACode((int)$user['id'], $code);
+        if (!empty($result['success']) && $result['success'] === true) {
             // Mark as unlocked in session
             $_SESSION['privacy_unlocked'] = true;
             $_SESSION['privacy_unlocked_time'] = time();
@@ -153,11 +167,11 @@ function handleVerifyCode($user) {
             echo json_encode([
                 'success' => true,
                 'unlocked' => true,
-                'message' => 'Authenticator code verified successfully'
+                'message' => 'Verification code accepted'
             ]);
         } else {
             http_response_code(400);
-            echo json_encode(['error' => 'Invalid authenticator code']);
+            echo json_encode(['error' => $result['error'] ?? 'Invalid verification code']);
         }
 
     } catch (Exception $e) {

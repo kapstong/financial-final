@@ -136,22 +136,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $method = $_POST['twofa'] ?? 'totp';
             $twoFA = TwoFactorAuth::getInstance();
 
+            // TOTP has been deprecated in this deployment; map requests to email-based 2FA
             if ($method === 'totp') {
-                $secret = $twoFA->generateTOTPSecret();
-                $result = $twoFA->enable2FA($user_id, 'totp', ['secret' => $secret]);
+                $method = 'email';
+            }
+
+            if ($method === 'email') {
+                $result = $twoFA->enable2FA($user_id, 'email', []);
 
                 if (!empty($result['success'])) {
-                    $message = 'Two-factor authentication enabled. Scan the QR code below with your authenticator app.';
+                    $message = 'Two-factor authentication enabled (email codes). Use the email verification flow.';
                     $messageType = 'success';
-                    $qrUrl = $twoFA->generateTOTPQRCode($secret, $user['username'] ?? ($user['email'] ?? 'user'));
-                    $displaySecret = $secret;
                     $backupCodes = $result['backup_codes'] ?? [];
                     // Refresh user data
                     $stmt = $db->prepare("SELECT * FROM users WHERE id = ?");
                     $stmt->execute([$user_id]);
                     $user = $stmt->fetch(PDO::FETCH_ASSOC);
                 } else {
-                    throw new Exception($result['error'] ?? 'Failed to enable TOTP');
+                    throw new Exception($result['error'] ?? 'Failed to enable 2FA');
                 }
             } else {
                 throw new Exception('Selected 2FA method is not supported from this interface.');
@@ -663,7 +665,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     <label class="form-check-label fw-bold" for="totp">
                                         TOTP (Time-based One-Time Password)
                                     </label>
-                                    <small class="d-block text-muted ms-4">Use an authenticator app like Google Authenticator</small>
+                                    <small class="d-block text-muted ms-4">Use email codes (a 6-digit code will be sent to your account email)</small>
                                 </div>
                                 <div class="form-check mb-3">
                                     <input class="form-check-input" type="radio" name="twofa" id="sms" value="sms">
@@ -680,7 +682,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <?php if (!empty($qrUrl)): ?>
                                 <div class="mt-3">
                                     <h6 class="mb-2">Scan this QR code</h6>
-                                    <p class="text-muted">Open your authenticator app and scan the code, or enter the secret manually.</p>
+                                    <p class="text-muted">This account uses email verification codes; a 6-digit code will be sent to the account email.</p>
                                     <div class="d-flex align-items-center gap-3">
                                         <img src="https://chart.googleapis.com/chart?chs=200x200&cht=qr&chl=<?php echo urlencode($qrUrl); ?>" alt="TOTP QR Code" style="width:200px;height:200px;border:1px solid #eaeaea;padding:8px;background:#fff;">
                                         <div>

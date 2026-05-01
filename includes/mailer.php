@@ -8,6 +8,7 @@ class Mailer {
     private static $instance = null;
     private $fromEmail;
     private $fromName;
+    private $usePHPMailer = false;
     private $smtpEnabled = false;
     private $smtpHost;
     private $smtpPort;
@@ -16,7 +17,15 @@ class Mailer {
     private $smtpEncryption;
     private $lastError = '';
 
-    private function __construct() {
+    public function __construct() {
+        // Attempt to load Composer autoload if present so PHPMailer can be used
+        $autoloadPath = __DIR__ . '/../vendor/autoload.php';
+        if (file_exists($autoloadPath)) {
+            require_once $autoloadPath;
+        }
+
+        $this->usePHPMailer = class_exists('PHPMailer\\PHPMailer\\PHPMailer');
+
         $configuredFromEmail = Config::get('mail.from_address') ?: 'noreply@atiera.com';
         $this->fromName = Config::get('mail.from_name') ?: 'ATIERA Finance';
 
@@ -238,6 +247,56 @@ class Mailer {
     }
 
     private function sendSmtp($to, $subject, $message, $headers) {
+        // Prefer PHPMailer if available - it's more robust and handles edge cases
+        if ($this->usePHPMailer) {
+            try {
+                $mail = new PHPMailer\\PHPMailer\\PHPMailer(true);
+                $mail->isSMTP();
+                $mail->SMTPDebug = 0;
+                $mail->Host = $this->smtpHost;
+                $mail->Port = $this->smtpPort;
+                $mail->SMTPAuth = !empty($this->smtpUser);
+                if (!empty($this->smtpUser)) {
+                    $mail->Username = $this->smtpUser;
+                    $mail->Password = $this->smtpPass;
+                }
+                $enc = strtolower($this->smtpEncryption);
+                if ($enc === 'ssl' || $enc === 'tls') {
+                    $mail->SMTPSecure = $enc === 'ssl' ? PHPMailer\\PHPMailer\\PHPMailer::ENCRYPTION_SMTPS : PHPMailer\\PHPMailer\\PHPMailer::ENCRYPTION_STARTTLS;
+                }
+
+                $from = $this->getEnvelopeFromEmail();
+                $mail->setFrom($from, $this->fromName);
+                $mail->addAddress($to);
+                $mail->Subject = $subject;
+                $mail->isHTML(stripos($headers, 'Content-Type: text/html') !== false || stripos($message, '<html') !== false);
+                $mail->Body = $message;
+                if (!$mail->isHTML()) {
+                    $mail->AltBody = strip_tags($message);
+                }
+
+                foreach (explode("\r\n", $headers) as $h) {
+                    $h = trim($h);
+                    if ($h === '') continue;
+                    if (stripos($h, 'Reply-To:') === 0) {
+                        $mail->addReplyTo(trim(substr($h, 9)));
+                    }
+                }
+
+                $sent = $mail->send();
+                if (!$sent) {
+                    $this->lastError = 'PHPMailer failed to send';
+                    return false;
+                }
+                return true;
+            } catch (Exception $e) {
+                $this->lastError = 'PHPMailer Exception: ' . $e->getMessage();
+                error_log('PHPMailer Exception: ' . $e->getMessage());
+                return false;
+            }
+        }
+
+        // Fallback to legacy socket implementation if PHPMailer is not available
         $host = $this->smtpHost;
         $port = $this->smtpPort;
         $encryption = strtolower($this->smtpEncryption);

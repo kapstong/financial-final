@@ -183,7 +183,7 @@ if (isset($_GET['cancel'])) {
       <div class="text-center mb-6">
         <img src="logo.png" alt="ATIERA" class="h-16 w-auto mx-auto mb-4">
         <h3 class="text-xl font-semibold mb-1">Two-Factor Authentication</h3>
-        <p class="text-sm text-slate-500">Enter the verification code from your authenticator app</p>
+        <p class="text-sm text-slate-500">Enter the 6-digit verification code sent to your email</p>
       </div>
 
       <?php if ($error): ?>
@@ -221,7 +221,7 @@ if (isset($_GET['cancel'])) {
             <?php echo $isTwoFALocked ? 'disabled' : ''; ?>
           >
           <p class="text-xs text-slate-500 mt-2 text-center">
-            Enter the 6-digit code from your authenticator app
+            Enter the 6-digit code sent to your email
           </p>
         </div>
 

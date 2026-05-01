@@ -23,43 +23,23 @@ class TwoFactorAuth {
      * Generate TOTP secret for user
      */
     public function generateTOTPSecret() {
-        // Generate a 32-character base32 secret
-        $chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-        $secret = '';
-        for ($i = 0; $i < 32; $i++) {
-            $secret .= $chars[random_int(0, strlen($chars) - 1)];
-        }
-        return $secret;
+        // TOTP removed. Use email verification codes instead.
+        return null;
     }
 
     /**
      * Generate QR code URL for TOTP setup
      */
     public function generateTOTPQRCode($secret, $username, $issuer = 'ATIERA Finance') {
-        $url = 'otpauth://totp/' . urlencode($issuer . ':' . $username) . '?secret=' . $secret . '&issuer=' . urlencode($issuer);
-        return $url;
+        // TOTP removed; QR code generation no longer supported.
+        return null;
     }
 
     /**
      * Verify TOTP code
      */
     public function verifyTOTPCode($secret, $code, $timeWindow = 2) {
-        // Convert secret from base32 to binary
-        $secret = $this->base32Decode($secret);
-
-        // Get current timestamp
-        $timestamp = time();
-
-        // Check codes in time window (current time ± timeWindow minutes)
-        for ($i = -$timeWindow; $i <= $timeWindow; $i++) {
-            $time = $timestamp + ($i * 30); // 30 seconds per TOTP interval
-            $generatedCode = $this->generateTOTP($secret, $time);
-
-            if ($generatedCode === str_pad($code, 6, '0', STR_PAD_LEFT)) {
-                return true;
-            }
-        }
-
+        // TOTP removed. This function should not be used.
         return false;
     }
 
@@ -67,50 +47,74 @@ class TwoFactorAuth {
      * Generate TOTP code from secret and timestamp
      */
     private function generateTOTP($secret, $timestamp) {
-        $time = floor($timestamp / 30); // 30-second intervals
-        $time = pack('N*', 0) . pack('N*', $time); // Convert to 8-byte big-endian
-
-        $hmac = hash_hmac('sha1', $time, $secret, true);
-        $offset = ord($hmac[19]) & 0x0F;
-
-        $code = (ord($hmac[$offset]) & 0x7F) << 24
-              | (ord($hmac[$offset + 1]) & 0xFF) << 16
-              | (ord($hmac[$offset + 2]) & 0xFF) << 8
-              | (ord($hmac[$offset + 3]) & 0xFF);
-
-        return str_pad($code % 1000000, 6, '0', STR_PAD_LEFT);
+        // Removed TOTP generation
+        return '000000';
     }
 
     /**
      * Base32 decode
      */
     private function base32Decode($base32) {
-        $base32chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-        $base32charsfl = strlen($base32chars);
+        // Base32 decode not needed anymore
+        return '';
+    }
 
-        $output = '';
-        $v = 0;
-        $vbits = 0;
-
-        for ($i = 0; $i < strlen($base32); $i++) {
-            $v <<= 5;
-            if ($base32[$i] >= 'A' && $base32[$i] <= 'Z') {
-                $v += ord($base32[$i]) - 65;
-            } elseif ($base32[$i] >= '2' && $base32[$i] <= '7') {
-                $v += 24 + ord($base32[$i]) - 50;
-            } else {
-                // Invalid character
-                continue;
+    /**
+     * Generate a temporary email verification code and send to user
+     */
+    public function generateAndSendEmailCode($userId) {
+        try {
+            $stmt = $this->db->prepare("SELECT id, email, first_name FROM users WHERE id = ? LIMIT 1");
+            $stmt->execute([$userId]);
+            $user = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$user || empty($user['email'])) {
+                return ['success' => false, 'error' => 'User email not found'];
             }
-            $vbits += 5;
 
-            if ($vbits >= 8) {
-                $output .= chr(($v >> ($vbits - 8)) & 0xFF);
-                $vbits -= 8;
+            $code = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+            // Store in session temporarily (expires in 2 minutes)
+            if (!isset($_SESSION)) {
+                session_start();
             }
+            $_SESSION['email_2fa'] = $_SESSION['email_2fa'] ?? [];
+            $_SESSION['email_2fa'][$userId] = [
+                'code' => $code,
+                'expires' => time() + 120
+            ];
+
+            $mailer = Mailer::getInstance();
+            $sent = $mailer->sendVerificationCode($user['email'], $code, $user['first_name'] ?? '');
+            if ($sent) {
+                return ['success' => true, 'message' => 'Email code sent'];
+            }
+            return ['success' => false, 'error' => 'Failed to send email code: ' . $mailer->getLastError()];
+
+        } catch (Exception $e) {
+            Logger::getInstance()->error('Failed to generate/send email 2FA code: ' . $e->getMessage());
+            return ['success' => false, 'error' => $e->getMessage()];
         }
+    }
 
-        return $output;
+    /**
+     * Verify email-based 2FA code (session-backed)
+     */
+    private function verifyEmailCode($userId, $code) {
+        if (!isset($_SESSION)) {
+            session_start();
+        }
+        $entry = $_SESSION['email_2fa'][$userId] ?? null;
+        if (!$entry) {
+            return false;
+        }
+        if (time() > ($entry['expires'] ?? 0)) {
+            unset($_SESSION['email_2fa'][$userId]);
+            return false;
+        }
+        if (hash_equals((string)$entry['code'], (string)$code)) {
+            unset($_SESSION['email_2fa'][$userId]);
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -255,15 +259,16 @@ class TwoFactorAuth {
 
         switch ($method) {
             case 'totp':
-                if ($this->verifyTOTPCode($config['secret'], $code)) {
-                    $this->log2FAVerification($userId, 'totp', true);
-                    return ['success' => true, 'method' => 'totp'];
+            case 'email':
+                // TOTP has been removed; treat configured TOTP method as email codes now
+                if ($this->verifyEmailCode($userId, $code)) {
+                    $this->log2FAVerification($userId, 'email', true);
+                    return ['success' => true, 'method' => 'email'];
                 }
                 break;
 
             case 'sms':
                 // SMS verification would be implemented here
-                // For now, return false
                 break;
 
             case 'backup_code':

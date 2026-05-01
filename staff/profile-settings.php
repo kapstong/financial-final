@@ -943,7 +943,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 <label class="form-check-label fw-bold" for="totp">
                                     TOTP (Time-based One-Time Password)
                                 </label>
-                                <small class="d-block text-muted ms-4">Use an authenticator app like Google Authenticator</small>
+                                <small class="d-block text-muted ms-4">Use email codes (a 6-digit code will be sent to your account email)</small>
                             </div>
                             <div class="form-check mb-3">
                                 <input class="form-check-input" type="radio" name="twofa" id="sms" value="sms">

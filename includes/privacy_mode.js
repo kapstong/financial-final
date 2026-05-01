@@ -94,7 +94,7 @@
                             <div class="alert alert-info" id="privacyVerificationMessage">
                                 <i class="fas fa-info-circle me-2"></i>
                                 <strong>Protected Information</strong><br>
-                                Enter the current 6-digit code from your authenticator app.
+                                Enter the 6-digit code sent to your email.
                             </div>
 
                             <form id="privacyCodeForm">
@@ -704,7 +704,7 @@
 
             verificationReady = true;
             messageEl.className = 'alert alert-info';
-            messageEl.innerHTML = '<i class="fas fa-mobile-alt me-2"></i><strong>Protected Information</strong><br>Use the current 6-digit code from your authenticator app.';
+            messageEl.innerHTML = '<i class="fas fa-mobile-alt me-2"></i><strong>Protected Information</strong><br>Use the 6-digit code sent to your email.';
             codeInput.disabled = false;
             verifyBtn.disabled = false;
             setTimeout(() => codeInput.focus(), 100);
