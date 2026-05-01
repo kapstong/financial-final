@@ -3,6 +3,8 @@ $pageTitle = 'Profile Settings';
 require_once '../includes/auth.php';
 require_once '../includes/database.php';
 require_once '../includes/device_detector.php';
+require_once '../includes/csrf.php';
+require_once '../includes/two_factor_auth.php';
 
 if (!isset($_SESSION['user'])) {
     header('Location: ../index.php');
@@ -38,6 +40,9 @@ try {
 
 $message = '';
 $messageType = '';
+$qrUrl = null;
+$backupCodes = [];
+$displaySecret = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['update_profile'])) {
@@ -118,6 +123,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         } catch (Exception $e) {
             $message = 'Error changing password: ' . $e->getMessage();
+            $messageType = 'danger';
+        }
+    }
+
+    if (isset($_POST['enable_2fa'])) {
+        try {
+            if (!csrf_verify_request()) {
+                throw new Exception('Invalid CSRF token.');
+            }
+
+            $method = $_POST['twofa'] ?? 'totp';
+            $twoFA = TwoFactorAuth::getInstance();
+
+            if ($method === 'totp') {
+                $secret = $twoFA->generateTOTPSecret();
+                $result = $twoFA->enable2FA($user_id, 'totp', ['secret' => $secret]);
+
+                if (!empty($result['success'])) {
+                    $message = 'Two-factor authentication enabled. Scan the QR code below with your authenticator app.';
+                    $messageType = 'success';
+                    $qrUrl = $twoFA->generateTOTPQRCode($secret, $user['username'] ?? ($user['email'] ?? 'user'));
+                    $displaySecret = $secret;
+                    $backupCodes = $result['backup_codes'] ?? [];
+                    // Refresh user data
+                    $stmt = $db->prepare("SELECT * FROM users WHERE id = ?");
+                    $stmt->execute([$user_id]);
+                    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+                } else {
+                    throw new Exception($result['error'] ?? 'Failed to enable TOTP');
+                }
+            } else {
+                throw new Exception('Selected 2FA method is not supported from this interface.');
+            }
+        } catch (Exception $e) {
+            $message = 'Error enabling 2FA: ' . $e->getMessage();
             $messageType = 'danger';
         }
     }
@@ -616,23 +656,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 <i class="fas fa-info-circle me-2"></i>
                                 Two-factor authentication adds an extra layer of security to your account.
                             </div>
-                            <div class="form-check mb-2">
-                                <input class="form-check-input" type="radio" name="twofa" id="totp" value="totp">
-                                <label class="form-check-label fw-bold" for="totp">
-                                    TOTP (Time-based One-Time Password)
-                                </label>
-                                <small class="d-block text-muted ms-4">Use an authenticator app like Google Authenticator</small>
-                            </div>
-                            <div class="form-check mb-3">
-                                <input class="form-check-input" type="radio" name="twofa" id="sms" value="sms">
-                                <label class="form-check-label fw-bold" for="sms">
-                                    SMS (Text Message)
-                                </label>
-                                <small class="d-block text-muted ms-4">Receive codes via text message</small>
-                            </div>
-                            <button type="button" class="btn btn-outline-primary">
-                                <i class="fas fa-mobile-alt me-2"></i>Enable 2FA
-                            </button>
+                            <form method="POST" action="" class="mb-3">
+                                <?php csrf_input(); ?>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input" type="radio" name="twofa" id="totp" value="totp" checked>
+                                    <label class="form-check-label fw-bold" for="totp">
+                                        TOTP (Time-based One-Time Password)
+                                    </label>
+                                    <small class="d-block text-muted ms-4">Use an authenticator app like Google Authenticator</small>
+                                </div>
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input" type="radio" name="twofa" id="sms" value="sms">
+                                    <label class="form-check-label fw-bold" for="sms">
+                                        SMS (Text Message)
+                                    </label>
+                                    <small class="d-block text-muted ms-4">Receive codes via text message</small>
+                                </div>
+                                <button type="submit" name="enable_2fa" value="1" class="btn btn-outline-primary">
+                                    <i class="fas fa-mobile-alt me-2"></i>Enable 2FA
+                                </button>
+                            </form>
+
+                            <?php if (!empty($qrUrl)): ?>
+                                <div class="mt-3">
+                                    <h6 class="mb-2">Scan this QR code</h6>
+                                    <p class="text-muted">Open your authenticator app and scan the code, or enter the secret manually.</p>
+                                    <div class="d-flex align-items-center gap-3">
+                                        <img src="https://chart.googleapis.com/chart?chs=200x200&cht=qr&chl=<?php echo urlencode($qrUrl); ?>" alt="TOTP QR Code" style="width:200px;height:200px;border:1px solid #eaeaea;padding:8px;background:#fff;">
+                                        <div>
+                                            <p><strong>Secret:</strong> <?php echo htmlspecialchars($displaySecret); ?></p>
+                                            <?php if (!empty($backupCodes)): ?>
+                                                <p class="mb-1"><strong>Backup codes</strong></p>
+                                                <ul>
+                                                    <?php foreach ($backupCodes as $c): ?>
+                                                        <li><?php echo htmlspecialchars($c); ?></li>
+                                                    <?php endforeach; ?>
+                                                </ul>
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
+                                </div>
+                            <?php endif; ?>
 
                             <hr class="my-4">
 
