@@ -108,26 +108,7 @@ if ($_POST) {
         $result = $auth->login($username, $password);
 
         if ($result['success']) {
-            // Check if user has 2FA enabled
-            require_once 'includes/two_factor_auth.php';
-            $twoFA = TwoFactorAuth::getInstance();
-
-            if ($twoFA->is2FAEnabled($result['user']['id'])) {
-                // Store pending 2FA verification in session
-                $_SESSION['pending_2fa_user_id'] = $result['user']['id'];
-                $_SESSION['pending_2fa_user'] = $result['user'];
-                $_SESSION['pending_device'] = $devicePayload;
-                $_SESSION['pending_login_method'] = 'password';
-
-                // Clear the logged in session temporarily
-                unset($_SESSION['user']);
-
-                // Redirect to 2FA verification page
-                header('Location: verify_2fa.php');
-                exit();
-            }
-
-            // No 2FA required, proceed with normal login
+              // Proceed with normal login
             $deviceInfo = detect_device_info($_SERVER['HTTP_USER_AGENT'] ?? '');
             $deviceLabel = build_device_label($devicePayload, $_SERVER['HTTP_USER_AGENT'] ?? '');
             Logger::getInstance()->logUserAction(

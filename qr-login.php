@@ -60,16 +60,7 @@ if (!$error && $qr) {
             'device_model' => null
         ];
 
-        $twoFA = TwoFactorAuth::getInstance();
-        if ($twoFA->is2FAEnabled($qr['user_id'])) {
-            $_SESSION['pending_2fa_user_id'] = $qr['user_id'];
-            $_SESSION['pending_2fa_user'] = $result['user'];
-            $_SESSION['pending_device'] = $devicePayload;
-            $_SESSION['pending_login_method'] = 'qr';
-            unset($_SESSION['user']);
-            header('Location: verify_2fa.php');
-            exit();
-        }
+        // Proceed with normal QR login (2FA enforcement removed)
 
         Logger::getInstance()->logUserAction(
             'QR Login',

@@ -1,0 +1,11 @@
+[01-May-2026 06:26:53 UTC] Database connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused it
+[01-May-2026 06:26:57 UTC] Database connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused it
+[01-May-2026 06:26:57 UTC] PHP Fatal error:  Uncaught Exception: Database connection failed. Please check your configuration. in C:\Users\Ecko\Desktop\integ-capstone\includes\database.php:65
+Stack trace:
+#0 C:\Users\Ecko\Desktop\integ-capstone\includes\database.php(71): Database->__construct()
+#1 C:\Users\Ecko\Desktop\integ-capstone\includes\logger.php(32): Database::getInstance()
+#2 C:\Users\Ecko\Desktop\integ-capstone\includes\logger.php(43): Logger->__construct()
+#3 C:\Users\Ecko\Desktop\integ-capstone\includes\logger.php(487): Logger::getInstance()
+#4 [internal function]: {closure:C:\Users\Ecko\Desktop\integ-capstone\includes\logger.php:480}()
+#5 {main}
+  thrown in C:\Users\Ecko\Desktop\integ-capstone\includes\database.php on line 65
