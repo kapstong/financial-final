@@ -47,6 +47,12 @@ try {
     if (file_exists(__DIR__ . '/../includes/database.php')) {
         require_once __DIR__ . '/../includes/database.php';
     }
+    if (file_exists(__DIR__ . '/../includes/logger.php')) {
+        require_once __DIR__ . '/../includes/logger.php';
+    }
+    if (file_exists(__DIR__ . '/../includes/mailer.php')) {
+        require_once __DIR__ . '/../includes/mailer.php';
+    }
     if (file_exists(__DIR__ . '/../includes/two_factor_auth.php')) {
         require_once __DIR__ . '/../includes/two_factor_auth.php';
     }
