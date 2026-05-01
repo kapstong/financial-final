@@ -145,31 +145,30 @@ try {
 function handleCheckMethod($user) {
     try {
         $db = Database::getInstance()->getConnection();
-        $stmt = $db->prepare("SELECT method FROM user_2fa WHERE user_id = ? AND is_enabled = 1 ORDER BY created_at DESC LIMIT 1");
-        $stmt->execute([(int)($user['id'] ?? 0)]);
-        $config = $stmt->fetch(PDO::FETCH_ASSOC);
-        if (!$config) {
+        ensureEmailCodesTable($db);
+        cleanupExpiredEmailCodes($db);
+
+        $account = getPrivacyVerificationUser($db, (int)($user['id'] ?? 0));
+        if (!$account || empty($account['email'])) {
             http_response_code(400);
             echo json_encode([
                 'success' => false,
-                'error' => 'Verification is not configured for this account.'
+                'error' => 'A valid account email is required to receive a verification code.'
             ]);
             return;
         }
 
-        // For systems that previously used TOTP we now use email codes
-        $method = ($config['method'] === 'totp') ? 'email' : $config['method'];
+        $method = 'email';
 
         // If the request intended to send a code, send it now
         $action = $_GET['action'] ?? $_POST['action'] ?? '';
         if ($action === 'send_code') {
-            $twoFactor = TwoFactorAuth::getInstance();
-            $res = $twoFactor->generateAndSendEmailCode((int)$user['id']);
-            if ($res['success']) {
+            $result = sendPrivacyEmailCode($db, $account);
+            if (!empty($result['success'])) {
                 echo json_encode(['success' => true, 'method' => $method, 'message' => 'Verification code sent to your email.']);
             } else {
                 http_response_code(500);
-                echo json_encode(['success' => false, 'error' => $res['error'] ?? 'Failed to send code']);
+                echo json_encode(['success' => false, 'error' => $result['error'] ?? 'Failed to send code']);
             }
             return;
         }
@@ -191,6 +190,10 @@ function handleCheckMethod($user) {
  */
 function handleVerifyCode($user) {
     try {
+        $db = Database::getInstance()->getConnection();
+        ensureEmailCodesTable($db);
+        cleanupExpiredEmailCodes($db);
+
         $code = $_POST['code'] ?? '';
 
         if (!preg_match('/^\d{6}$/', (string)$code)) {
@@ -199,9 +202,8 @@ function handleVerifyCode($user) {
             return;
         }
 
-        $twoFactor = TwoFactorAuth::getInstance();
-        $result = $twoFactor->verify2FACode((int)$user['id'], $code);
-        if (!empty($result['success']) && $result['success'] === true) {
+        $verified = verifyPrivacyEmailCode($db, (int)$user['id'], (string)$code);
+        if ($verified) {
             // Mark as unlocked in session
             $_SESSION['privacy_unlocked'] = true;
             $_SESSION['privacy_unlocked_time'] = time();
@@ -214,7 +216,7 @@ function handleVerifyCode($user) {
             ]);
         } else {
             http_response_code(400);
-            echo json_encode(['error' => $result['error'] ?? 'Invalid verification code']);
+            echo json_encode(['error' => 'Invalid or expired verification code']);
         }
 
     } catch (Exception $e) {
@@ -300,6 +302,110 @@ function getTotpConfigForUser(int $userId): ?array
     }
 
     return $config;
+}
+
+function ensureEmailCodesTable(PDO $db): void
+{
+    static $initialized = false;
+
+    if ($initialized) {
+        return;
+    }
+
+    $db->exec(
+        'CREATE TABLE IF NOT EXISTS email_codes (
+            id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            user_id INT UNSIGNED NOT NULL,
+            email VARCHAR(255) NOT NULL,
+            code VARCHAR(10) NOT NULL,
+            expires_at DATETIME NOT NULL,
+            created_at DATETIME NOT NULL,
+            PRIMARY KEY (id),
+            UNIQUE KEY ux_email_codes_user_email (user_id, email),
+            KEY idx_email_codes_expires_at (expires_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+    );
+
+    $initialized = true;
+}
+
+function cleanupExpiredEmailCodes(PDO $db): void
+{
+    $db->exec('DELETE FROM email_codes WHERE expires_at <= NOW()');
+}
+
+function getPrivacyVerificationUser(PDO $db, int $userId): ?array
+{
+    if ($userId <= 0) {
+        return null;
+    }
+
+    $stmt = $db->prepare('SELECT id, email, first_name FROM users WHERE id = ? LIMIT 1');
+    $stmt->execute([$userId]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    return $user ?: null;
+}
+
+function sendPrivacyEmailCode(PDO $db, array $user): array
+{
+    $userId = (int)($user['id'] ?? 0);
+    $email = trim((string)($user['email'] ?? ''));
+
+    if ($userId <= 0 || $email === '') {
+        return ['success' => false, 'error' => 'User email not found'];
+    }
+
+    $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+
+    $insert = $db->prepare(
+        'INSERT INTO email_codes (user_id, email, code, expires_at, created_at)
+         VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL 2 MINUTE), NOW())
+         ON DUPLICATE KEY UPDATE code = VALUES(code), expires_at = VALUES(expires_at), created_at = VALUES(created_at)'
+    );
+    $insert->execute([$userId, $email, $code]);
+
+    $mailer = Mailer::getInstance();
+    $sent = $mailer->sendVerificationCode($email, $code, (string)($user['first_name'] ?? ''));
+    if ($sent) {
+        return ['success' => true];
+    }
+
+    $delete = $db->prepare('DELETE FROM email_codes WHERE user_id = ? AND email = ?');
+    $delete->execute([$userId, $email]);
+
+    $error = trim((string) $mailer->getLastError());
+    if ($error === '') {
+        $error = 'Failed to send verification email';
+    }
+
+    return ['success' => false, 'error' => $error];
+}
+
+function verifyPrivacyEmailCode(PDO $db, int $userId, string $code): bool
+{
+    if ($userId <= 0 || !preg_match('/^\d{6}$/', $code)) {
+        return false;
+    }
+
+    $stmt = $db->prepare(
+        'SELECT id
+         FROM email_codes
+         WHERE user_id = ? AND code = ? AND expires_at > NOW()
+         ORDER BY created_at DESC
+         LIMIT 1'
+    );
+    $stmt->execute([$userId, $code]);
+    $record = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$record) {
+        return false;
+    }
+
+    $delete = $db->prepare('DELETE FROM email_codes WHERE id = ?');
+    $delete->execute([(int) $record['id']]);
+
+    return true;
 }
 
 ob_end_flush();
