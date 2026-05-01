@@ -1220,8 +1220,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             });
         }
 </script>
-<script src="../includes/privacy_mode.js?v=12"></script>
+<script src="../includes/privacy_mode.js?v=13"></script>
 <script src="../includes/tab_persistence.js?v=1"></script>
 </body>
 </html>
+
 

@@ -5,7 +5,7 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
 
 <!-- Privacy Mode - Hide amounts with asterisks -->
-<script src="../includes/privacy_mode.js?v=12"></script>
+<script src="../includes/privacy_mode.js?v=13"></script>
 
 <!-- Inactivity Timeout - Blur screen after 10 sec, logout after 2 min -->
 <script src="../includes/inactivity_timeout.js"></script>
@@ -82,6 +82,7 @@ document.addEventListener('click', function(event) {
 <script src="../includes/tab_persistence.js?v=1"></script>
 </body>
 </html>
+
 
 
 
