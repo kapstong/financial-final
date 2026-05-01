@@ -13,6 +13,8 @@
     const STORAGE_KEY = 'privacyModeVisible';
     const SERVER_REFRESH_KEY = 'privacyModeRefreshPending';
     let verificationReady = false;
+    let verificationModal = null;
+    let activeVerificationRequest = 0;
 
     const AMOUNT_REGEX = /(?:[₱$€£¥]\s*-?[\d,]+\.?\d*)|(?:PHP\s*-?[\d,]+\.?\d*)|(?:P\s*-?[\d,]+\.?\d*)|(?:\(\s*(?:[₱$€£¥P])?\s*-?[\d,]+\.?\d*\s*\))/g;
     const MASKED_CLASS = 'privacy-mask';
@@ -76,79 +78,79 @@
         refreshIfServerMasked();
     }
 
-    /**
-     * Create verification OTP modal - Professional, clean design
-     */
     function createPasswordModal() {
-        const modalHTML = `
-            <div id="privacyPasswordModal" class="modal fade" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
-                <div class="modal-dialog modal-dialog-centered">
-                    <div class="modal-content shadow-lg" style="border-radius: 12px; border: none;">
-                        <div class="modal-header bg-gradient text-white border-0" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px 12px 0 0; padding: 2rem;">
-                            <div>
-                                <h5 class="modal-title mb-0 fw-bold" style="font-size: 1.5rem;">
-                                    <i class="fas fa-lock me-2"></i>Security Verification
-                                </h5>
-                                <small class="text-white-50 mt-1">One-Time Password</small>
-                            </div>
-                        </div>
-                        <div class="modal-body" style="padding: 2.5rem 2rem;">
-                            <div class="text-center mb-4">
-                                <div class="mb-3">
-                                    <i class="fas fa-shield-alt" style="font-size: 3rem; color: #667eea; opacity: 0.3;"></i>
-                                </div>
-                                <p class="text-dark fw-bold mb-1" style="font-size: 1.1rem;">Verify Your Identity</p>
-                                <p class="text-muted">We've sent a 6-digit code to your email</p>
-                            </div>
+        if (verificationModal) {
+            return verificationModal;
+        }
 
-                            <form id="privacyCodeForm">
-                                <div class="mb-3">
-                                    <label for="privacyCode" class="form-label fw-bold text-dark">Enter Code</label>
-                                    <div class="position-relative">
-                                        <input type="text" class="form-control form-control-lg text-center"
-                                               id="privacyCode" placeholder="000000" maxlength="6"
-                                               pattern="[0-9]{6}" required autofocus
-                                               autocomplete="one-time-code"
-                                               inputmode="numeric"
-                                               style="font-size: 2.5rem; letter-spacing: 12px; font-weight: 700; border: 2px solid #e0e0e0; border-radius: 10px; transition: all 0.3s ease; padding: 1rem;">
-                                        <small class="form-text text-muted d-block mt-2 text-center">Enter the 6 digits from your email</small>
-                                    </div>
-                                    <div class="invalid-feedback d-block mt-2" id="privacyCodeError" style="display: none; color: #dc3545; font-weight: 500;"></div>
-                                </div>
+        ensureMaskStyles();
 
-                                <div id="privacyOtpStatus" class="alert alert-info d-none" style="border-radius: 8px; margin-top: 1rem;">
-                                    <span class="spinner-border spinner-border-sm me-2"></span>
-                                    <span id="privacyOtpStatusText">Sending code to your email...</span>
-                                </div>
-                            </form>
-
-                            <div id="privacyOtpSuccess" class="alert alert-success d-none" style="border-radius: 8px; margin-top: 1rem;">
-                                <i class="fas fa-check-circle me-2"></i>
-                                <span>OTP sent successfully!</span>
+        const wrapper = document.createElement('div');
+        wrapper.id = 'privacyPasswordModal';
+        wrapper.className = 'privacy-otp-modal';
+        wrapper.setAttribute('data-privacy-exempt', 'true');
+        wrapper.setAttribute('aria-hidden', 'true');
+        wrapper.innerHTML = `
+            <div class="privacy-otp-backdrop" data-privacy-close="1"></div>
+            <div class="privacy-otp-dialog" role="dialog" aria-modal="true" aria-labelledby="privacyOtpTitle" data-privacy-exempt="true">
+                <div class="privacy-otp-card" data-privacy-exempt="true">
+                    <div class="privacy-otp-header">
+                        <div class="privacy-otp-icon"><i class="fas fa-shield-alt"></i></div>
+                        <div>
+                            <h2 id="privacyOtpTitle">Verification Required</h2>
+                            <p>We will send a 6-digit code to your email before amounts can be shown.</p>
+                        </div>
+                    </div>
+                    <div class="privacy-otp-body">
+                        <div id="privacyOtpStatus" class="privacy-otp-banner privacy-otp-banner-info">
+                            <span class="privacy-otp-spinner" aria-hidden="true"></span>
+                            <span id="privacyOtpStatusText">Sending your verification code...</span>
+                        </div>
+                        <div id="privacyOtpSuccess" class="privacy-otp-banner privacy-otp-banner-success" hidden>
+                            <i class="fas fa-check-circle"></i>
+                            <span>Code sent. Check the user email and enter it below.</span>
+                        </div>
+                        <div id="privacyCodeError" class="privacy-otp-banner privacy-otp-banner-error" hidden></div>
+                        <form id="privacyCodeForm" novalidate>
+                            <label class="privacy-otp-label" for="privacyCode">Enter 6-Digit Code</label>
+                            <input
+                                type="text"
+                                id="privacyCode"
+                                class="privacy-otp-input"
+                                placeholder="000000"
+                                maxlength="6"
+                                inputmode="numeric"
+                                autocomplete="one-time-code"
+                                aria-describedby="privacyOtpHint"
+                                disabled
+                            >
+                            <p id="privacyOtpHint" class="privacy-otp-hint">Only digits are accepted. The code expires in 2 minutes.</p>
+                            <div class="privacy-otp-actions-row">
+                                <button type="button" id="privacyResendBtn" class="privacy-otp-link">Resend code</button>
                             </div>
-                        </div>
-                        <div class="modal-footer border-0" style="padding: 1.5rem 2rem;">
-                            <button type="button" class="btn btn-light" data-bs-dismiss="modal" style="padding: 0.75rem 1.5rem; border-radius: 8px; font-weight: 500;">Cancel</button>
-                            <button type="button" class="btn btn-primary" id="privacyVerifyBtn" style="padding: 0.75rem 2rem; border-radius: 8px; font-weight: 500; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none;">
-                                <i class="fas fa-check me-2"></i>Verify
-                            </button>
-                        </div>
+                        </form>
+                    </div>
+                    <div class="privacy-otp-footer">
+                        <button type="button" id="privacyCancelBtn" class="privacy-otp-button privacy-otp-button-secondary">Cancel</button>
+                        <button type="button" id="privacyVerifyBtn" class="privacy-otp-button privacy-otp-button-primary" disabled>Verify & Show Amounts</button>
                     </div>
                 </div>
             </div>
         `;
 
-        document.body.insertAdjacentHTML('beforeend', modalHTML);
+        document.body.appendChild(wrapper);
+        verificationModal = wrapper;
 
-        // Event listeners
         const form = document.getElementById('privacyCodeForm');
         const codeInput = document.getElementById('privacyCode');
         const verifyBtn = document.getElementById('privacyVerifyBtn');
+        const resendBtn = document.getElementById('privacyResendBtn');
+        const cancelBtn = document.getElementById('privacyCancelBtn');
         const errorDiv = document.getElementById('privacyCodeError');
 
         if (form) {
-            form.addEventListener('submit', (e) => {
-                e.preventDefault();
+            form.addEventListener('submit', function(event) {
+                event.preventDefault();
                 verifyCodeAndShow();
             });
         }
@@ -157,53 +159,79 @@
             verifyBtn.addEventListener('click', verifyCodeAndShow);
         }
 
-        // Auto-verify when 6 digits entered
-        if (codeInput) {
-            codeInput.addEventListener('input', (e) => {
-                const code = e.target.value;
-                e.target.classList.remove('is-invalid');
-                if (errorDiv) errorDiv.style.display = 'none';
-                
-                // Add visual feedback while typing
-                if (code.length === 6 && /^\d{6}$/.test(code)) {
-                    setTimeout(() => verifyCodeAndShow(), 300);
-                }
-            });
-
-            // Visual feedback on focus
-            codeInput.addEventListener('focus', (e) => {
-                e.target.style.borderColor = '#667eea';
-                e.target.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)';
-            });
-
-            codeInput.addEventListener('blur', (e) => {
-                e.target.style.borderColor = '#e0e0e0';
-                e.target.style.boxShadow = 'none';
+        if (resendBtn) {
+            resendBtn.addEventListener('click', function() {
+                prepareVerification();
             });
         }
+
+        if (cancelBtn) {
+            cancelBtn.addEventListener('click', closePasswordModal);
+        }
+
+        wrapper.addEventListener('click', function(event) {
+            if (event.target && event.target.getAttribute('data-privacy-close') === '1') {
+                closePasswordModal();
+            }
+        });
+
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape' && verificationModal && verificationModal.classList.contains('is-open')) {
+                closePasswordModal();
+            }
+        });
+
+        if (codeInput) {
+            codeInput.addEventListener('input', function(event) {
+                const normalized = event.target.value.replace(/\D/g, '').slice(0, 6);
+                if (event.target.value !== normalized) {
+                    event.target.value = normalized;
+                }
+                event.target.classList.remove('is-invalid');
+                hideVerificationError();
+                toggleVerifyButtonState();
+            });
+
+            codeInput.addEventListener('keydown', function(event) {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    verifyCodeAndShow();
+                }
+            });
+        }
+
+        toggleVerifyButtonState();
+        return verificationModal;
     }
 
     /**
      * Verify OTP code and show amounts - Clean, bulletproof
      */
     function verifyCodeAndShow() {
-        const codeInput = document.getElementById('privacyCode');
-        const errorDiv = document.getElementById('privacyCodeError');
-        const verifyBtn = document.getElementById('privacyVerifyBtn');
-        const code = codeInput.value.trim();
+        const elements = getVerificationElements();
+        const codeInput = elements.codeInput;
+        const verifyBtn = elements.verifyBtn;
+        const code = codeInput ? codeInput.value.trim() : '';
 
-        if (!code || code.length !== 6 || !/^\d{6}$/.test(code)) {
-            codeInput.classList.add('is-invalid');
-            if (errorDiv) {
-                errorDiv.textContent = 'Please enter a valid 6-digit code';
-                errorDiv.style.display = 'block';
-            }
+        if (!codeInput || !verifyBtn) {
             return;
         }
 
-        const originalBtnText = verifyBtn.innerHTML;
+        if (!verificationReady) {
+            showVerificationError('Wait for the code to be sent before verifying.');
+            return;
+        }
+
+        if (!code || code.length !== 6 || !/^\d{6}$/.test(code)) {
+            codeInput.classList.add('is-invalid');
+            showVerificationError('Please enter a valid 6-digit code.');
+            return;
+        }
+
+        hideVerificationError();
         const originalBtnState = verifyBtn.disabled;
-        verifyBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Verifying...';
+        const originalBtnText = verifyBtn.textContent;
+        verifyBtn.textContent = 'Verifying...';
         verifyBtn.disabled = true;
         codeInput.disabled = true;
 
@@ -219,30 +247,18 @@
         .then(parseApiResponse)
         .then(data => {
             if (data.success) {
-                // Success - show amounts
                 showAmounts();
                 codeInput.value = '';
                 codeInput.classList.remove('is-invalid');
-                if (errorDiv) errorDiv.style.display = 'none';
-                
-                // Close modal
-                const modalEl = document.getElementById('privacyPasswordModal');
-                if (modalEl) {
-                    const modal = bootstrap.Modal.getInstance(modalEl);
-                    if (modal) modal.hide();
-                }
+                closePasswordModal();
             } else {
                 throw new Error(data.error || 'Invalid code');
             }
         })
         .catch(error => {
-            // Error - show message and reset
             codeInput.classList.add('is-invalid');
-            if (errorDiv) {
-                errorDiv.textContent = error.message || 'Verification failed. Please try again.';
-                errorDiv.style.display = 'block';
-            }
-            verifyBtn.innerHTML = originalBtnText;
+            showVerificationError(error.message || 'Verification failed. Please try again.');
+            verifyBtn.textContent = originalBtnText;
             verifyBtn.disabled = originalBtnState;
             codeInput.disabled = false;
             codeInput.focus();
@@ -307,17 +323,134 @@
         return '/api/' + filename;
     }
 
-    /**
-     * Show password modal
-     */
-    function showPasswordModal() {
-        prepareVerification();
-        const modal = new bootstrap.Modal(document.getElementById('privacyPasswordModal'));
-        modal.show();
+    function getVerificationElements() {
+        return {
+            modal: verificationModal || document.getElementById('privacyPasswordModal'),
+            codeInput: document.getElementById('privacyCode'),
+            verifyBtn: document.getElementById('privacyVerifyBtn'),
+            resendBtn: document.getElementById('privacyResendBtn'),
+            cancelBtn: document.getElementById('privacyCancelBtn'),
+            errorDiv: document.getElementById('privacyCodeError'),
+            statusDiv: document.getElementById('privacyOtpStatus'),
+            statusText: document.getElementById('privacyOtpStatusText'),
+            successDiv: document.getElementById('privacyOtpSuccess')
+        };
+    }
 
-        document.getElementById('privacyPasswordModal').addEventListener('shown.bs.modal', function() {
-            document.getElementById('privacyCode').focus();
-        });
+    function hideVerificationError() {
+        const elements = getVerificationElements();
+        if (elements.errorDiv) {
+            elements.errorDiv.hidden = true;
+            elements.errorDiv.textContent = '';
+        }
+    }
+
+    function showVerificationError(message) {
+        const elements = getVerificationElements();
+        if (elements.errorDiv) {
+            elements.errorDiv.textContent = message;
+            elements.errorDiv.hidden = false;
+        }
+    }
+
+    function setVerificationStatus(message, variant) {
+        const elements = getVerificationElements();
+        if (!elements.statusDiv || !elements.statusText) {
+            return;
+        }
+
+        elements.statusText.textContent = message;
+        elements.statusDiv.hidden = false;
+        elements.statusDiv.classList.toggle('is-error', variant === 'error');
+        elements.statusDiv.classList.toggle('is-success', variant === 'success');
+    }
+
+    function hideVerificationStatus() {
+        const elements = getVerificationElements();
+        if (elements.statusDiv) {
+            elements.statusDiv.hidden = true;
+            elements.statusDiv.classList.remove('is-error', 'is-success');
+        }
+    }
+
+    function showVerificationSuccess(message) {
+        const elements = getVerificationElements();
+        if (elements.successDiv) {
+            const span = elements.successDiv.querySelector('span');
+            if (span) {
+                span.textContent = message;
+            }
+            elements.successDiv.hidden = false;
+        }
+    }
+
+    function hideVerificationSuccess() {
+        const elements = getVerificationElements();
+        if (elements.successDiv) {
+            elements.successDiv.hidden = true;
+        }
+    }
+
+    function toggleVerifyButtonState() {
+        const elements = getVerificationElements();
+        if (!elements.verifyBtn || !elements.codeInput) {
+            return;
+        }
+
+        const ready = verificationReady && /^\d{6}$/.test(elements.codeInput.value.trim());
+        elements.verifyBtn.disabled = !ready;
+    }
+
+    function resetVerificationModal() {
+        const elements = getVerificationElements();
+        verificationReady = false;
+        hideVerificationError();
+        hideVerificationSuccess();
+        setVerificationStatus('Sending your verification code...', 'info');
+
+        if (elements.codeInput) {
+            elements.codeInput.value = '';
+            elements.codeInput.disabled = true;
+            elements.codeInput.classList.remove('is-invalid');
+        }
+        if (elements.verifyBtn) {
+            elements.verifyBtn.disabled = true;
+            elements.verifyBtn.textContent = 'Verify & Show Amounts';
+        }
+        if (elements.resendBtn) {
+            elements.resendBtn.disabled = true;
+        }
+    }
+
+    function openPasswordModal() {
+        const modal = createPasswordModal();
+        modal.classList.add('is-open');
+        modal.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('privacy-otp-open');
+
+        const elements = getVerificationElements();
+        if (elements.codeInput) {
+            setTimeout(function() {
+                elements.codeInput.focus();
+            }, 50);
+        }
+    }
+
+    function closePasswordModal() {
+        const elements = getVerificationElements();
+        if (!elements.modal) {
+            return;
+        }
+
+        elements.modal.classList.remove('is-open');
+        elements.modal.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('privacy-otp-open');
+        hideVerificationError();
+    }
+
+    function showPasswordModal() {
+        openPasswordModal();
+        prepareVerification();
     }
 
     /**
@@ -642,6 +775,223 @@
         const style = document.createElement('style');
         style.id = 'privacy-mask-styles';
         style.textContent = `
+            body.privacy-otp-open {
+                overflow: hidden;
+            }
+            .privacy-otp-modal {
+                position: fixed;
+                inset: 0;
+                display: none;
+                align-items: center;
+                justify-content: center;
+                z-index: 2000;
+                padding: 24px;
+            }
+            .privacy-otp-modal.is-open {
+                display: flex;
+            }
+            .privacy-otp-backdrop {
+                position: absolute;
+                inset: 0;
+                background: rgba(15, 23, 42, 0.56);
+                backdrop-filter: blur(3px);
+            }
+            .privacy-otp-dialog {
+                position: relative;
+                width: min(100%, 520px);
+                z-index: 1;
+            }
+            .privacy-otp-card {
+                background: #ffffff;
+                border-radius: 20px;
+                box-shadow: 0 28px 80px rgba(15, 23, 42, 0.28);
+                overflow: hidden;
+                color: #1f2937;
+            }
+            .privacy-otp-header {
+                display: flex;
+                gap: 16px;
+                align-items: flex-start;
+                padding: 24px 24px 18px;
+                background: linear-gradient(135deg, #0f2f57 0%, #184a7a 100%);
+                color: #ffffff;
+            }
+            .privacy-otp-header h2 {
+                margin: 0 0 6px;
+                font-size: 28px;
+                font-weight: 800;
+                line-height: 1.1;
+            }
+            .privacy-otp-header p {
+                margin: 0;
+                color: rgba(255, 255, 255, 0.84);
+                font-size: 14px;
+                line-height: 1.45;
+            }
+            .privacy-otp-icon {
+                width: 48px;
+                height: 48px;
+                border-radius: 14px;
+                background: rgba(255, 255, 255, 0.14);
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+                font-size: 20px;
+            }
+            .privacy-otp-body {
+                padding: 24px;
+            }
+            .privacy-otp-label {
+                display: block;
+                margin-bottom: 10px;
+                font-size: 14px;
+                font-weight: 700;
+                color: #334155;
+            }
+            .privacy-otp-input {
+                width: 100%;
+                border: 2px solid #d8e1ec;
+                border-radius: 16px;
+                background: #f8fafc;
+                color: #0f172a;
+                font-size: 36px;
+                font-weight: 800;
+                line-height: 1;
+                text-align: center;
+                letter-spacing: 0.45em;
+                padding: 18px 20px;
+                outline: none;
+                transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+            }
+            .privacy-otp-input:focus {
+                border-color: #0f766e;
+                box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.12);
+                background: #ffffff;
+            }
+            .privacy-otp-input:disabled {
+                opacity: 0.72;
+                cursor: not-allowed;
+            }
+            .privacy-otp-input.is-invalid {
+                border-color: #dc2626;
+                box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.08);
+            }
+            .privacy-otp-hint {
+                margin: 10px 0 0;
+                font-size: 13px;
+                color: #64748b;
+            }
+            .privacy-otp-actions-row {
+                display: flex;
+                justify-content: flex-end;
+                margin-top: 12px;
+            }
+            .privacy-otp-link {
+                border: 0;
+                background: transparent;
+                color: #0f766e;
+                font-weight: 700;
+                padding: 0;
+            }
+            .privacy-otp-link:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+            }
+            .privacy-otp-banner {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                border-radius: 14px;
+                padding: 14px 16px;
+                margin-bottom: 16px;
+                font-size: 14px;
+                line-height: 1.4;
+            }
+            .privacy-otp-banner-info {
+                background: #ecfeff;
+                color: #155e75;
+                border: 1px solid #a5f3fc;
+            }
+            .privacy-otp-banner-success {
+                background: #ecfdf5;
+                color: #166534;
+                border: 1px solid #86efac;
+            }
+            .privacy-otp-banner-error,
+            .privacy-otp-banner.is-error {
+                background: #fef2f2;
+                color: #991b1b;
+                border: 1px solid #fecaca;
+            }
+            .privacy-otp-spinner {
+                width: 16px;
+                height: 16px;
+                border-radius: 999px;
+                border: 2px solid rgba(21, 94, 117, 0.22);
+                border-top-color: #155e75;
+                animation: privacy-otp-spin 0.8s linear infinite;
+                flex-shrink: 0;
+            }
+            .privacy-otp-footer {
+                display: flex;
+                justify-content: flex-end;
+                gap: 12px;
+                padding: 0 24px 24px;
+            }
+            .privacy-otp-button {
+                border: 0;
+                border-radius: 14px;
+                padding: 14px 18px;
+                font-size: 15px;
+                font-weight: 800;
+                line-height: 1;
+                transition: transform 0.15s ease, opacity 0.15s ease;
+            }
+            .privacy-otp-button:hover:not(:disabled) {
+                transform: translateY(-1px);
+            }
+            .privacy-otp-button:disabled {
+                opacity: 0.6;
+                cursor: not-allowed;
+            }
+            .privacy-otp-button-secondary {
+                background: #e2e8f0;
+                color: #334155;
+            }
+            .privacy-otp-button-primary {
+                background: linear-gradient(135deg, #0f766e 0%, #22c55e 100%);
+                color: #ffffff;
+            }
+            @keyframes privacy-otp-spin {
+                from { transform: rotate(0deg); }
+                to { transform: rotate(360deg); }
+            }
+            @media (max-width: 640px) {
+                .privacy-otp-modal {
+                    padding: 16px;
+                }
+                .privacy-otp-header,
+                .privacy-otp-body,
+                .privacy-otp-footer {
+                    padding-left: 18px;
+                    padding-right: 18px;
+                }
+                .privacy-otp-header h2 {
+                    font-size: 24px;
+                }
+                .privacy-otp-input {
+                    font-size: 28px;
+                    letter-spacing: 0.35em;
+                    padding: 16px;
+                }
+                .privacy-otp-footer {
+                    flex-direction: column-reverse;
+                }
+                .privacy-otp-button {
+                    width: 100%;
+                }
+            }
             .${MASKED_CLASS} {
                 white-space: pre;
                 color: var(--privacy-mask-color, #1f2937);
@@ -738,29 +1088,19 @@
     }
 
     function prepareVerification() {
-        verificationReady = false;
-
+        const requestId = ++activeVerificationRequest;
         const apiPath = getApiPath('otp.php');
-        const codeInput = document.getElementById('privacyCode');
-        const verifyBtn = document.getElementById('privacyVerifyBtn');
-        const errorDiv = document.getElementById('privacyCodeError');
-        const statusDiv = document.getElementById('privacyOtpStatus');
-        const successDiv = document.getElementById('privacyOtpSuccess');
+        const elements = getVerificationElements();
+        const codeInput = elements.codeInput;
+        const verifyBtn = elements.verifyBtn;
+        const resendBtn = elements.resendBtn;
 
         if (!codeInput || !verifyBtn) {
             return;
         }
 
-        // Reset form
-        codeInput.disabled = true;
-        verifyBtn.disabled = true;
-        codeInput.value = '';
-        codeInput.classList.remove('is-invalid');
-        if (errorDiv) errorDiv.style.display = 'none';
-        if (successDiv) successDiv.classList.add('d-none');
-        if (statusDiv) statusDiv.classList.remove('d-none');
+        resetVerificationModal();
 
-        // Send OTP to user's email
         fetch(apiPath + '?action=send', {
             method: 'POST',
             headers: {
@@ -769,12 +1109,19 @@
         })
         .then(parseApiResponse)
         .then(data => {
+            if (requestId !== activeVerificationRequest) {
+                return;
+            }
+
             if (data.success) {
                 verificationReady = true;
-                if (statusDiv) statusDiv.classList.add('d-none');
-                if (successDiv) successDiv.classList.remove('d-none');
+                hideVerificationStatus();
+                showVerificationSuccess('Code sent. Check the user email and enter it below.');
                 codeInput.disabled = false;
-                verifyBtn.disabled = false;
+                if (resendBtn) {
+                    resendBtn.disabled = false;
+                }
+                toggleVerifyButtonState();
                 setTimeout(() => {
                     codeInput.focus();
                 }, 200);
@@ -783,14 +1130,19 @@
             }
         })
         .catch(error => {
-            verificationReady = false;
-            if (statusDiv) statusDiv.classList.add('d-none');
-            if (errorDiv) {
-                errorDiv.textContent = 'Error: ' + (error.message || 'Failed to send OTP');
-                errorDiv.style.display = 'block';
+            if (requestId !== activeVerificationRequest) {
+                return;
             }
+
+            verificationReady = false;
+            hideVerificationStatus();
+            hideVerificationSuccess();
+            showVerificationError(error.message || 'Failed to send OTP.');
             codeInput.disabled = false;
-            verifyBtn.disabled = false;
+            if (resendBtn) {
+                resendBtn.disabled = false;
+            }
+            toggleVerifyButtonState();
             console.error('prepareVerification error:', error);
         });
     }
