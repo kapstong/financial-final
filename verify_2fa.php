@@ -28,6 +28,25 @@ if (!$config) {
     $error = 'Too many invalid verification attempts. Please wait before trying again.';
 }
 
+// On initial GET load, automatically generate and send an email code for email-based 2FA
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && empty($error) && !$isTwoFALocked) {
+  $method = strtolower($config['method'] ?? '');
+  if ($method === 'email' || $method === 'totp') {
+    $lastSent = (int) ($_SESSION['pending_2fa_code_sent_at'] ?? 0);
+    // throttle resends to once every 90 seconds
+    if ($lastSent === 0 || (time() - $lastSent) > 90) {
+      $res = $twoFA->generateAndSendEmailCode($userId);
+      if (!empty($res['success']) && $res['success'] === true) {
+        $info = $res['message'] ?? 'Verification code sent to your email.';
+        $_SESSION['pending_2fa_code_sent_at'] = time();
+      } else {
+        // don't overwrite critical existing errors
+        $error = $res['error'] ?? 'Failed to send verification code. Please contact your administrator.';
+      }
+    }
+  }
+}
+
 // Handle form submission
 if ($_POST) {
     if (!csrf_verify_request()) {
