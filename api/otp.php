@@ -1,131 +1,76 @@
 <?php
 /**
- * OTP (One-Time Password) API
- * Handles OTP generation, sending, and verification
+ * OTP (One-Time Password) API - Clean implementation
  */
 
+// Set response type FIRST - before anything else
 header('Content-Type: application/json; charset=utf-8');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization');
 
-// Prevent any output before JSON
-if (ob_get_level() === 0) {
-    ob_start();
-}
-
-// Start session first
+// No output buffering - keep it simple
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// Minimal error handling - catch everything
-try {
-    // Load only essential includes
-    require_once __DIR__ . '/../config.php';
-    require_once __DIR__ . '/../includes/database.php';
-    require_once __DIR__ . '/../includes/logger.php';
-    require_once __DIR__ . '/../includes/mailer.php';
-    require_once __DIR__ . '/../includes/two_factor_auth.php';
-    
-    // Check authentication
-    if (!isset($_SESSION['user']) || empty($_SESSION['user']['id'])) {
-        http_response_code(401);
-        echo json_encode(['success' => false, 'error' => 'Unauthorized']);
-        ob_end_flush();
-        exit;
-    }
-    
-    $userId = (int)$_SESSION['user']['id'];
-    $action = $_GET['action'] ?? $_POST['action'] ?? '';
-    
-    switch ($action) {
-        case 'send':
-            handleSendOTP($userId);
-            break;
-            
-        case 'verify':
-            handleVerifyOTP($userId);
-            break;
-            
-        default:
-            http_response_code(400);
-            echo json_encode(['success' => false, 'error' => 'Invalid action']);
-    }
-    
-    ob_end_flush();
-    
-} catch (Exception $e) {
-    ob_end_clean();
-    http_response_code(500);
-    echo json_encode(['success' => false, 'error' => 'Server error: ' . $e->getMessage()]);
-    exit;
+// Check auth immediately
+if (!isset($_SESSION['user']) || empty($_SESSION['user']['id'])) {
+    http_response_code(401);
+    die(json_encode(['success' => false, 'error' => 'Unauthorized']));
 }
 
-/**
- * Send OTP to user's email
- */
-function handleSendOTP($userId) {
-    try {
+$userId = (int)$_SESSION['user']['id'];
+$action = $_GET['action'] ?? $_POST['action'] ?? '';
+
+// Load dependencies
+try {
+    require_once __DIR__ . '/../config.php';
+    require_once __DIR__ . '/../includes/database.php';
+    require_once __DIR__ . '/../includes/two_factor_auth.php';
+} catch (Exception $e) {
+    http_response_code(500);
+    die(json_encode(['success' => false, 'error' => 'Failed to load dependencies: ' . $e->getMessage()]));
+}
+
+// Route action
+try {
+    if ($action === 'send') {
         $twoFactor = TwoFactorAuth::getInstance();
         $result = $twoFactor->generateAndSendEmailCode($userId);
         
         if ($result['success']) {
-            echo json_encode([
-                'success' => true,
-                'message' => 'OTP sent to your email',
-                'expires_in' => 120  // 2 minutes
-            ]);
+            echo json_encode(['success' => true, 'message' => 'OTP sent to your email']);
         } else {
             http_response_code(400);
-            echo json_encode([
-                'success' => false,
-                'error' => $result['error'] ?? 'Failed to send OTP'
-            ]);
+            echo json_encode(['success' => false, 'error' => $result['error'] ?? 'Failed to send OTP']);
         }
-    } catch (Exception $e) {
-        http_response_code(500);
-        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
-    }
-}
-
-/**
- * Verify OTP code
- */
-function handleVerifyOTP($userId) {
-    try {
+    } 
+    elseif ($action === 'verify') {
         $code = $_POST['code'] ?? '';
         
-        // Validate format
         if (!preg_match('/^\d{6}$/', (string)$code)) {
             http_response_code(400);
             echo json_encode(['success' => false, 'error' => 'Invalid code format']);
-            return;
+            exit;
         }
         
         $twoFactor = TwoFactorAuth::getInstance();
         $result = $twoFactor->verify2FACode($userId, $code);
         
         if (!empty($result['success']) && $result['success'] === true) {
-            // Mark privacy mode as unlocked in session
             $_SESSION['privacy_unlocked'] = true;
             $_SESSION['privacy_unlocked_time'] = time();
             $_SESSION['privacy_visible'] = true;
-            
-            echo json_encode([
-                'success' => true,
-                'message' => 'OTP verified successfully'
-            ]);
+            echo json_encode(['success' => true, 'message' => 'OTP verified']);
         } else {
             http_response_code(400);
-            echo json_encode([
-                'success' => false,
-                'error' => $result['error'] ?? 'Invalid or expired OTP'
-            ]);
+            echo json_encode(['success' => false, 'error' => $result['error'] ?? 'Invalid OTP']);
         }
-    } catch (Exception $e) {
-        http_response_code(500);
-        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
     }
+    else {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Invalid action']);
+    }
+} catch (Exception $e) {
+    http_response_code(500);
+    echo json_encode(['success' => false, 'error' => $e->getMessage()]);
 }
 ?>

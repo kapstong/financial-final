@@ -77,45 +77,59 @@
     }
 
     /**
-     * Create verification OTP modal (new clean implementation)
+     * Create verification OTP modal - Professional, clean design
      */
     function createPasswordModal() {
         const modalHTML = `
             <div id="privacyPasswordModal" class="modal fade" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
                 <div class="modal-dialog modal-dialog-centered">
-                    <div class="modal-content">
-                        <div class="modal-header bg-primary text-white border-0">
-                            <h5 class="modal-title">
-                                <i class="fas fa-lock me-2"></i>Verify Your Identity
-                            </h5>
+                    <div class="modal-content shadow-lg" style="border-radius: 12px; border: none;">
+                        <div class="modal-header bg-gradient text-white border-0" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px 12px 0 0; padding: 2rem;">
+                            <div>
+                                <h5 class="modal-title mb-0 fw-bold" style="font-size: 1.5rem;">
+                                    <i class="fas fa-lock me-2"></i>Security Verification
+                                </h5>
+                                <small class="text-white-50 mt-1">One-Time Password</small>
+                            </div>
                         </div>
-                        <div class="modal-body pt-4">
+                        <div class="modal-body" style="padding: 2.5rem 2rem;">
                             <div class="text-center mb-4">
-                                <p class="text-muted mb-1">For security, we need to verify your identity</p>
-                                <p class="text-muted small">A 6-digit code has been sent to your email</p>
+                                <div class="mb-3">
+                                    <i class="fas fa-shield-alt" style="font-size: 3rem; color: #667eea; opacity: 0.3;"></i>
+                                </div>
+                                <p class="text-dark fw-bold mb-1" style="font-size: 1.1rem;">Verify Your Identity</p>
+                                <p class="text-muted">We've sent a 6-digit code to your email</p>
                             </div>
 
-                            <form id="privacyCodeForm" class="mb-3">
+                            <form id="privacyCodeForm">
                                 <div class="mb-3">
-                                    <label for="privacyCode" class="form-label fw-bold">Enter 6-Digit Code</label>
-                                    <input type="text" class="form-control form-control-lg text-center"
-                                           id="privacyCode" placeholder="000000" maxlength="6"
-                                           pattern="[0-9]{6}" required autofocus
-                                           autocomplete="one-time-code"
-                                           inputmode="numeric"
-                                           style="font-size: 28px; letter-spacing: 6px; font-weight: bold;">
-                                    <div class="invalid-feedback d-block" id="privacyCodeError" style="display: none;"></div>
+                                    <label for="privacyCode" class="form-label fw-bold text-dark">Enter Code</label>
+                                    <div class="position-relative">
+                                        <input type="text" class="form-control form-control-lg text-center"
+                                               id="privacyCode" placeholder="000000" maxlength="6"
+                                               pattern="[0-9]{6}" required autofocus
+                                               autocomplete="one-time-code"
+                                               inputmode="numeric"
+                                               style="font-size: 2.5rem; letter-spacing: 12px; font-weight: 700; border: 2px solid #e0e0e0; border-radius: 10px; transition: all 0.3s ease; padding: 1rem;">
+                                        <small class="form-text text-muted d-block mt-2 text-center">Enter the 6 digits from your email</small>
+                                    </div>
+                                    <div class="invalid-feedback d-block mt-2" id="privacyCodeError" style="display: none; color: #dc3545; font-weight: 500;"></div>
+                                </div>
+
+                                <div id="privacyOtpStatus" class="alert alert-info d-none" style="border-radius: 8px; margin-top: 1rem;">
+                                    <span class="spinner-border spinner-border-sm me-2"></span>
+                                    <span id="privacyOtpStatusText">Sending code to your email...</span>
                                 </div>
                             </form>
 
-                            <div id="privacyOtpStatus" class="alert alert-info d-none">
-                                <span class="spinner-border spinner-border-sm me-2"></span>
-                                <span id="privacyOtpStatusText">Sending code...</span>
+                            <div id="privacyOtpSuccess" class="alert alert-success d-none" style="border-radius: 8px; margin-top: 1rem;">
+                                <i class="fas fa-check-circle me-2"></i>
+                                <span>OTP sent successfully!</span>
                             </div>
                         </div>
-                        <div class="modal-footer border-0">
-                            <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
-                            <button type="button" class="btn btn-primary" id="privacyVerifyBtn">
+                        <div class="modal-footer border-0" style="padding: 1.5rem 2rem;">
+                            <button type="button" class="btn btn-light" data-bs-dismiss="modal" style="padding: 0.75rem 1.5rem; border-radius: 8px; font-weight: 500;">Cancel</button>
+                            <button type="button" class="btn btn-primary" id="privacyVerifyBtn" style="padding: 0.75rem 2rem; border-radius: 8px; font-weight: 500; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none;">
                                 <i class="fas fa-check me-2"></i>Verify
                             </button>
                         </div>
@@ -149,26 +163,39 @@
                 const code = e.target.value;
                 e.target.classList.remove('is-invalid');
                 if (errorDiv) errorDiv.style.display = 'none';
+                
+                // Add visual feedback while typing
                 if (code.length === 6 && /^\d{6}$/.test(code)) {
-                    verifyCodeAndShow();
+                    setTimeout(() => verifyCodeAndShow(), 300);
                 }
+            });
+
+            // Visual feedback on focus
+            codeInput.addEventListener('focus', (e) => {
+                e.target.style.borderColor = '#667eea';
+                e.target.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)';
+            });
+
+            codeInput.addEventListener('blur', (e) => {
+                e.target.style.borderColor = '#e0e0e0';
+                e.target.style.boxShadow = 'none';
             });
         }
     }
 
     /**
-     * Verify OTP code and show amounts (new clean implementation)
+     * Verify OTP code and show amounts - Clean, bulletproof
      */
     function verifyCodeAndShow() {
         const codeInput = document.getElementById('privacyCode');
         const errorDiv = document.getElementById('privacyCodeError');
         const verifyBtn = document.getElementById('privacyVerifyBtn');
-        const code = codeInput.value;
+        const code = codeInput.value.trim();
 
         if (!code || code.length !== 6 || !/^\d{6}$/.test(code)) {
             codeInput.classList.add('is-invalid');
             if (errorDiv) {
-                errorDiv.textContent = 'Please enter a 6-digit code';
+                errorDiv.textContent = 'Please enter a valid 6-digit code';
                 errorDiv.style.display = 'block';
             }
             return;
@@ -190,38 +217,37 @@
             body: 'code=' + encodeURIComponent(code)
         })
         .then(response => {
+            // Check for network errors
             if (!response.ok) {
-                throw new Error('HTTP ' + response.status);
+                throw new Error('HTTP ' + response.status + ': ' + response.statusText);
             }
-            return response.json();
+            return response.json().catch(() => {
+                throw new Error('Invalid response from server');
+            });
         })
         .then(data => {
             if (data.success) {
+                // Success - show amounts
                 showAmounts();
                 codeInput.value = '';
                 codeInput.classList.remove('is-invalid');
                 if (errorDiv) errorDiv.style.display = 'none';
                 
-                const modal = bootstrap.Modal.getInstance(document.getElementById('privacyPasswordModal'));
-                if (modal) {
-                    modal.hide();
+                // Close modal
+                const modalEl = document.getElementById('privacyPasswordModal');
+                if (modalEl) {
+                    const modal = bootstrap.Modal.getInstance(modalEl);
+                    if (modal) modal.hide();
                 }
             } else {
-                codeInput.classList.add('is-invalid');
-                if (errorDiv) {
-                    errorDiv.textContent = data.error || 'Invalid code';
-                    errorDiv.style.display = 'block';
-                }
-                verifyBtn.innerHTML = originalBtnText;
-                verifyBtn.disabled = originalBtnState;
-                codeInput.disabled = false;
-                codeInput.focus();
+                throw new Error(data.error || 'Invalid code');
             }
         })
         .catch(error => {
+            // Error - show message and reset
             codeInput.classList.add('is-invalid');
             if (errorDiv) {
-                errorDiv.textContent = 'Network error. Please try again.';
+                errorDiv.textContent = error.message || 'Verification failed. Please try again.';
                 errorDiv.style.display = 'block';
             }
             verifyBtn.innerHTML = originalBtnText;
@@ -705,7 +731,7 @@
         const verifyBtn = document.getElementById('privacyVerifyBtn');
         const errorDiv = document.getElementById('privacyCodeError');
         const statusDiv = document.getElementById('privacyOtpStatus');
-        const statusText = document.getElementById('privacyOtpStatusText');
+        const successDiv = document.getElementById('privacyOtpSuccess');
 
         if (!codeInput || !verifyBtn) {
             return;
@@ -717,14 +743,10 @@
         codeInput.value = '';
         codeInput.classList.remove('is-invalid');
         if (errorDiv) errorDiv.style.display = 'none';
+        if (successDiv) successDiv.classList.add('d-none');
+        if (statusDiv) statusDiv.classList.remove('d-none');
 
-        // Show status
-        if (statusDiv) {
-            statusDiv.classList.remove('d-none');
-            if (statusText) statusText.textContent = 'Sending OTP to your email...';
-        }
-
-        // Send OTP
+        // Send OTP to user's email
         fetch(apiPath + '?action=send', {
             method: 'POST',
             headers: {
@@ -735,15 +757,20 @@
             if (!response.ok) {
                 throw new Error('HTTP ' + response.status);
             }
-            return response.json();
+            return response.json().catch(() => {
+                throw new Error('Invalid response from server');
+            });
         })
         .then(data => {
             if (data.success) {
                 verificationReady = true;
                 if (statusDiv) statusDiv.classList.add('d-none');
+                if (successDiv) successDiv.classList.remove('d-none');
                 codeInput.disabled = false;
                 verifyBtn.disabled = false;
-                setTimeout(() => codeInput.focus(), 100);
+                setTimeout(() => {
+                    codeInput.focus();
+                }, 200);
             } else {
                 throw new Error(data.error || 'Failed to send OTP');
             }
@@ -752,7 +779,7 @@
             verificationReady = false;
             if (statusDiv) statusDiv.classList.add('d-none');
             if (errorDiv) {
-                errorDiv.textContent = error.message || 'Failed to send OTP. Please try again.';
+                errorDiv.textContent = 'Failed to send OTP: ' + (error.message || 'Please try again');
                 errorDiv.style.display = 'block';
             }
             codeInput.disabled = true;
