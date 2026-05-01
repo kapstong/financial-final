@@ -24,6 +24,9 @@ $isStaffArea = strpos($scriptName, '/staff/') !== false;
 $profileLink = $isUserArea ? 'profile.php' : ($isSuperAdminArea ? 'superadmin-profile-settings.php' : ($isStaffArea ? 'profile-settings.php' : 'admin-profile-settings.php'));
 $settingsLink = $isUserArea ? 'settings.php' : 'settings.php';
 $searchLink = $isSuperAdminArea || $isAdminArea ? '/admin/search.php' : '/staff/search.php';
+$scriptDirectory = trim(str_replace('\\', '/', dirname($scriptName)), '/.');
+$pathSegments = $scriptDirectory === '' ? [] : explode('/', $scriptDirectory);
+$assetPrefix = str_repeat('../', count($pathSegments));
 
 // Get user role for display
 require_once '../includes/permissions.php';
@@ -85,7 +88,8 @@ $csrfToken = csrf_token();
     </div>
 </nav>
 <meta name="csrf-token" content="<?php echo htmlspecialchars($csrfToken); ?>">
-<script src="../includes/inactivity_timeout.js?v=4"></script>
+<script src="<?php echo htmlspecialchars($assetPrefix . 'includes/privacy_mode.js?v=14'); ?>"></script>
+<script src="<?php echo htmlspecialchars($assetPrefix . 'includes/inactivity_timeout.js?v=4'); ?>"></script>
 <script>
     (function() {
         const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
