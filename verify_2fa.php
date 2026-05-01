@@ -1,4 +1,12 @@
 <?php
+// Temporary debug helpers: enable full error reporting to diagnose the blank page.
+// Remove or comment these lines after resolving the issue.
+ini_set('display_errors', '1');
+ini_set('display_startup_errors', '1');
+error_reporting(E_ALL);
+ini_set('log_errors', '1');
+ini_set('error_log', __DIR__ . '/logs/php_errors.log');
+
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/csrf.php';
