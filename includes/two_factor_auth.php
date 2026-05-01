@@ -73,8 +73,8 @@ class TwoFactorAuth {
 
             $code = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
 
-            // Persist code in sms_codes table (reuse for email codes) with 2 minute expiry
-            $insert = $this->db->prepare("INSERT INTO sms_codes (user_id, phone_number, code, expires_at, created_at)
+            // Persist code in email_codes table (separate from sms_codes) with 2 minute expiry
+            $insert = $this->db->prepare("INSERT INTO email_codes (user_id, email, code, expires_at, created_at)
                 VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL 2 MINUTE), NOW())
                 ON DUPLICATE KEY UPDATE code = ?, expires_at = DATE_ADD(NOW(), INTERVAL 2 MINUTE)");
             $insert->execute([$userId, $user['email'], $code, $code]);
@@ -88,7 +88,7 @@ class TwoFactorAuth {
             }
 
             // If mail failed, remove the DB entry so codes can't be used
-            $del = $this->db->prepare("DELETE FROM sms_codes WHERE user_id = ? AND phone_number = ? AND code = ?");
+            $del = $this->db->prepare("DELETE FROM email_codes WHERE user_id = ? AND email = ? AND code = ?");
             $del->execute([$userId, $user['email'], $code]);
 
             Logger::getInstance()->error('Failed to send email 2FA code: ' . $mailer->getLastError());
@@ -105,13 +105,12 @@ class TwoFactorAuth {
      */
     private function verifyEmailCode($userId, $code) {
         try {
-            $stmt = $this->db->prepare("SELECT id FROM sms_codes WHERE user_id = ? AND phone_number = ? AND code = ? AND expires_at > NOW() LIMIT 1");
-            // phone_number stores email for email codes
+            $stmt = $this->db->prepare("SELECT id FROM email_codes WHERE user_id = ? AND email = ? AND code = ? AND expires_at > NOW() LIMIT 1");
             $stmt->execute([$userId, $this->getUserEmailById($userId), $code]);
             $row = $stmt->fetch(PDO::FETCH_ASSOC);
             if ($row) {
                 // consume code
-                $del = $this->db->prepare("DELETE FROM sms_codes WHERE id = ?");
+                $del = $this->db->prepare("DELETE FROM email_codes WHERE id = ?");
                 $del->execute([$row['id']]);
                 return true;
             }
