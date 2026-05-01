@@ -754,11 +754,21 @@
             }
         })
         .then(response => {
-            if (!response.ok) {
-                throw new Error('HTTP ' + response.status);
-            }
-            return response.json().catch(() => {
-                throw new Error('Invalid response from server');
+            // Get response text first to debug
+            return response.text().then(text => {
+                console.log('OTP API Response:', response.status, text);
+                
+                if (!response.ok) {
+                    throw new Error('HTTP ' + response.status);
+                }
+                
+                // Try to parse JSON
+                try {
+                    return JSON.parse(text);
+                } catch (e) {
+                    console.error('JSON Parse Error:', e, 'Text:', text);
+                    throw new Error('Server returned invalid response');
+                }
             });
         })
         .then(data => {
@@ -779,11 +789,12 @@
             verificationReady = false;
             if (statusDiv) statusDiv.classList.add('d-none');
             if (errorDiv) {
-                errorDiv.textContent = 'Failed to send OTP: ' + (error.message || 'Please try again');
+                errorDiv.textContent = 'Error: ' + (error.message || 'Failed to send OTP');
                 errorDiv.style.display = 'block';
             }
-            codeInput.disabled = true;
-            verifyBtn.disabled = true;
+            codeInput.disabled = false;
+            verifyBtn.disabled = false;
+            console.error('prepareVerification error:', error);
         });
     }
 
