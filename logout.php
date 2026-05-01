@@ -1,8 +1,8 @@
 <?php
-require_once 'config.php';
-require_once 'includes/database.php';
-require_once 'includes/logger.php';
-require_once 'includes/device_detector.php';
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/includes/database.php';
+require_once __DIR__ . '/includes/logger.php';
+require_once __DIR__ . '/includes/device_detector.php';
 
 session_start();
 

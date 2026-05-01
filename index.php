@@ -1,8 +1,8 @@
 <?php
-require_once 'config.php';
-require_once 'includes/auth.php';
-require_once 'includes/csrf.php';
-require_once 'includes/device_detector.php';
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/includes/auth.php';
+require_once __DIR__ . '/includes/csrf.php';
+require_once __DIR__ . '/includes/device_detector.php';
 $auth = new Auth();
 $recaptchaConfigured = RECAPTCHA_SITE_KEY !== '' && RECAPTCHA_SECRET_KEY !== '';
 

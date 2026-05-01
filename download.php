@@ -4,9 +4,9 @@
  * Secure file download with access control
  */
 
-require_once 'includes/auth.php';
-require_once 'includes/file_upload.php';
-require_once 'includes/privacy_guard.php';
+require_once __DIR__ . '/includes/auth.php';
+require_once __DIR__ . '/includes/file_upload.php';
+require_once __DIR__ . '/includes/privacy_guard.php';
 
 session_start();
 
