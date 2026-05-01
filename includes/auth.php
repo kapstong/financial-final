@@ -10,6 +10,11 @@ if (session_status() === PHP_SESSION_NONE) {
 // Ensure CSRF token exists for the session.
 csrf_token();
 
+// Clear any leftover pending 2FA session state (removed 2FA enforcement elsewhere)
+if (isset($_SESSION['pending_2fa_user_id']) || isset($_SESSION['pending_2fa_user'])) {
+    unset($_SESSION['pending_2fa_user_id'], $_SESSION['pending_2fa_user'], $_SESSION['pending_device'], $_SESSION['pending_login_method']);
+}
+
 if (!isset($_SESSION['privacy_unlocked'])) {
     $_SESSION['privacy_unlocked'] = false;
 }
