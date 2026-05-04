@@ -13,7 +13,6 @@
     // Configuration
     const TIMEOUT_DURATION = 2 * 60 * 1000; // 2 minutes in milliseconds
     const WARNING_DURATION = 30 * 1000; // Show warning 30 seconds before timeout
-    const BLUR_DURATION = 10 * 1000; // Blur screen after 10 seconds
     const CHECK_INTERVAL = 1000; // Check every second
 
     let lastActivity = Date.now();
@@ -21,8 +20,6 @@
     let warningShown = false;
     let warningModal = null;
     let countdownInterval = null;
-    let isBlurred = false;
-    let blurOverlayElement = null;
 
     // Events that count as user activity
     const activityEvents = [
@@ -40,11 +37,6 @@
     function updateActivity() {
         lastActivity = Date.now();
         warningShown = false;
-
-        // Remove blur if active
-        if (isBlurred) {
-            removeBlur();
-        }
 
         // Hide warning if shown
         if (warningModal) {
@@ -202,9 +194,8 @@
     function createWarningModal() {
         // Create modal HTML
         const modalHTML = `
-            <div id="inactivity-warning-modal" style="display: none; position: fixed; z-index: 1050; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.7); align-items: center; justify-content: center;">
-                <div style="background-color: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); max-width: 400px; text-align: center;">
-                    <div style="font-size: 48px; color: #f59e0b; margin-bottom: 15px;">⚠️</div>
+            <div id="inactivity-warning-modal" style="display: none; position: fixed; z-index: 1050; left: 0; right: 0; bottom: 24px; align-items: center; justify-content: center; pointer-events: none;">
+                <div style="background-color: white; padding: 22px; border-radius: 10px; box-shadow: 0 12px 32px rgba(0,0,0,0.25); max-width: 400px; text-align: center; pointer-events: auto; border: 1px solid #e5e7eb;">
                     <h2 style="margin: 0 0 15px 0; color: #1b2f73; font-size: 24px;">Inactivity Warning</h2>
                     <p style="margin: 0 0 20px 0; color: #64748b; font-size: 16px;">
                         You will be logged out due to inactivity in:
@@ -272,7 +263,7 @@
      */
     function sendKeepAlive() {
         // Use relative path based on current location
-        const apiPath = window.location.pathname.includes('/admin/')
+        const apiPath = /\/(?:superadmin|admin|staff)\//.test(window.location.pathname)
             ? '../api/keep_alive.php'
             : 'api/keep_alive.php';
 
@@ -343,11 +334,6 @@
     function checkInactivity() {
         const now = Date.now();
         const inactiveTime = now - lastActivity;
-
-        // Apply blur after 10 seconds of inactivity
-        if (inactiveTime >= BLUR_DURATION && !isBlurred) {
-            applyBlur();
-        }
 
         // Show warning when close to timeout
         if (inactiveTime >= TIMEOUT_DURATION - WARNING_DURATION && !warningShown) {

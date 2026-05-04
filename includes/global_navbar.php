@@ -130,6 +130,7 @@ $privacyModeEnabled = privacyModeEnabled();
     </div>
 </div>
 <meta name="csrf-token" content="<?php echo htmlspecialchars($csrfToken); ?>">
+<script src="<?php echo htmlspecialchars($assetPrefix . 'includes/inactivity_timeout.js?v=5'); ?>"></script>
 <script>
     (function() {
         const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
