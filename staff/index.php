@@ -1,6 +1,7 @@
 <?php
 require_once '../includes/auth.php';
 require_once '../includes/permissions.php';
+require_once '../includes/dashboard_financial_data.php';
 
 if (!isset($_SESSION['user'])) {
     header('Location: ../index.php');
@@ -148,6 +149,14 @@ try {
         $incomeLabels = ['Rooms', 'Restaurant', 'Bar', 'Banquet & Events', 'Spa & Wellness', 'Other Services'];
         $incomeAmounts = [0, 0, 0, 0, 0, 0];
     }
+
+    $financialDashboardData = getDashboardFinancialData($db);
+    $annualBudgetTotal = $financialDashboardData['annualBudgetTotal'];
+    $chartData = $financialDashboardData['chartData'];
+    $cashFlowData = $financialDashboardData['cashFlowData'];
+    $budgetActualData = $financialDashboardData['budgetActualData'];
+    $incomeLabels = $financialDashboardData['incomeLabels'];
+    $incomeAmounts = $financialDashboardData['incomeAmounts'];
 
 } catch (Exception $e) {
     Logger::getInstance()->logDatabaseError('Staff dashboard metrics calculation', $e->getMessage());

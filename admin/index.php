@@ -1,6 +1,7 @@
 <?php
 require_once '../includes/auth.php';
 require_once '../includes/database.php';
+require_once '../includes/dashboard_financial_data.php';
 
 if (!isset($_SESSION['user'])) {
     header('Location: ../index.php');
@@ -224,6 +225,32 @@ try {
     $stmt = $db->prepare("SELECT COALESCE(SUM(bi.budgeted_amount), 0) as total FROM budget_items bi JOIN budgets b ON bi.budget_id = b.id WHERE b.budget_year = YEAR(CURDATE())");
     $stmt->execute();
     $annualBudgetTotal = (float)$stmt->fetch()['total'];
+
+    $financialDashboardData = getDashboardFinancialData($db);
+    $totalIncome = $financialDashboardData['totalIncome'];
+    $totalExpenses = $financialDashboardData['totalExpenses'];
+    $netProfit = $totalIncome - $totalExpenses;
+    $cashBalance = $financialDashboardData['cashBalance'];
+    $todayIncome = $financialDashboardData['todayIncome'];
+    $todayExpenses = $financialDashboardData['todayExpenses'];
+    $todayBalance = $todayIncome - $todayExpenses;
+    $chartData = $financialDashboardData['chartData'];
+    $cashFlowData = $financialDashboardData['cashFlowData'];
+    $budgetActualData = $financialDashboardData['budgetActualData'];
+    $incomeLabels = $financialDashboardData['incomeLabels'];
+    $incomeAmounts = $financialDashboardData['incomeAmounts'];
+    $annualBudgetTotal = $financialDashboardData['annualBudgetTotal'];
+    $healthScore = 0;
+    if ($totalIncome > 0) {
+        $profitMargin = ($netProfit / $totalIncome) * 100;
+        $liquidityRatio = $totalPayables > 0 ? ($cashBalance / $totalPayables) * 100 : 100;
+        $receivablesRatio = $totalReceivables > 0 ? ($totalIncome / $totalReceivables) : 10;
+        $healthScore = min(100, max(0,
+            ($profitMargin * 0.4) +
+            (min(100, $liquidityRatio) * 0.3) +
+            (min(100, $receivablesRatio * 10) * 0.3)
+        ));
+    }
 
 } catch (Exception $e) {
     // Handle database errors gracefully
