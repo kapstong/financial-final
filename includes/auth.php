@@ -15,13 +15,6 @@ if (isset($_SESSION['pending_2fa_user_id']) || isset($_SESSION['pending_2fa_user
     unset($_SESSION['pending_2fa_user_id'], $_SESSION['pending_2fa_user'], $_SESSION['pending_device'], $_SESSION['pending_login_method']);
 }
 
-if (!isset($_SESSION['privacy_unlocked'])) {
-    $_SESSION['privacy_unlocked'] = false;
-}
-if (!isset($_SESSION['privacy_visible'])) {
-    $_SESSION['privacy_visible'] = false;
-}
-
 // Ensure RBAC defaults are present (idempotent).
 if (!isset($_SESSION['rbac_defaults_initialized'])) {
     try {
@@ -233,11 +226,6 @@ if ($isApiRequest && !empty($_SESSION['user']['id'])) {
 // Log page views for authenticated users (non-API, non-AJAX requests)
 if (!empty($_SESSION['user']['id'])) {
     $isApi = $isApiRequest;
-
-    if (!$isApi && !$isAjax && stripos($scriptPath, '.php') !== false) {
-        require_once __DIR__ . '/privacy_output_mask.php';
-        startPrivacyOutputMasking();
-    }
 
     if (!$isApi && !$isAjax && stripos($scriptPath, '.php') !== false) {
         $scriptName = pathinfo($scriptPath, PATHINFO_FILENAME);

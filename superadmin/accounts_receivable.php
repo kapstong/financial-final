@@ -3141,12 +3141,7 @@ try {
             URL.revokeObjectURL(url);
             showAlert(`${type.charAt(0).toUpperCase() + type.slice(1)} report exported successfully.`, 'success');
         };
-    </script>
-
-    <!-- Privacy Mode - Hide amounts with asterisks + Eye button -->
-    <script src="../includes/privacy_mode.js?v=14"></script>
-
-    <!-- Inactivity Timeout - Blur screen + Auto logout -->
+    </script><!-- Inactivity Timeout - Blur screen + Auto logout -->
     <script src="../includes/inactivity_timeout.js?v=3"></script>
 <script src="../includes/navbar_datetime.js"></script>
 <script src="../includes/tab_persistence.js?v=1"></script>

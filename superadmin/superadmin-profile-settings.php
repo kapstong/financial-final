@@ -4,7 +4,6 @@ require_once '../includes/auth.php';
 require_once '../includes/database.php';
 require_once '../includes/device_detector.php';
 require_once '../includes/csrf.php';
-require_once '../includes/two_factor_auth.php';
 
 if (!isset($_SESSION['user'])) {
     header('Location: ../index.php');
@@ -845,8 +844,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="../includes/alert-modal.js"></script>
-    <script src="../includes/privacy_mode.js?v=14"></script>
-<script src="../includes/tab_persistence.js?v=1"></script>
+    <script src="../includes/tab_persistence.js?v=1"></script>
 </body>
 </html>
 

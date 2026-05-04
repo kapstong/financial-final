@@ -6,7 +6,6 @@
 
 require_once '../includes/auth.php';
 require_once '../includes/i18n.php';
-require_once '../includes/privacy_guard.php';
 
 $auth = new Auth();
 $auth->requireLogin();
@@ -130,7 +129,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'DELETE' && isset($_GET['action'])) {
 
 // Handle export requests
 if (isset($_GET['export']) && isset($_GET['language'])) {
-    requirePrivacyVisible('text');
     $language = $_GET['language'] ?? '';
     // Sanitize language to prevent path traversal
     if (!preg_match('/^[a-z]{2}(?:_[A-Z]{2})?$/', $language)) {

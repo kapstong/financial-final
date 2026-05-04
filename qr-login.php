@@ -3,7 +3,6 @@ require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/qr_codes.php';
 require_once __DIR__ . '/includes/device_detector.php';
-require_once __DIR__ . '/includes/two_factor_auth.php';
 
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');

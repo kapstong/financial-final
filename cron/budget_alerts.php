@@ -6,13 +6,11 @@
 
 require_once '../includes/database.php';
 require_once '../includes/logger.php';
-require_once '../includes/mailer.php';
 require_once '../includes/budget_alerts.php';
 
 try {
     $db = Database::getInstance()->getConnection();
     $logger = Logger::getInstance();
-    $mailer = new Mailer();
 
     $logger->info('Starting budget alerts cron job');
 
@@ -93,10 +91,7 @@ try {
         ";
 
         foreach ($recipients as $email) {
-            $sent = $mailer->send($email, $subject, $message, ['html' => true]);
-            if ($sent) {
-                $sentCount++;
-            }
+            $logger->info("Budget alert would be sent to: $email (mail system disabled)");
         }
 
         $upsert = $db->prepare("

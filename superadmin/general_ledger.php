@@ -2,7 +2,6 @@
 require_once '../includes/auth.php';
 require_once '../includes/database.php';
 require_once '../includes/api_integrations.php';
-require_once '../includes/privacy_guard.php';
 require_once '../includes/formatting.php';
 
 if (!isset($_SESSION['user'])) {
@@ -3742,10 +3741,6 @@ try {
         }
 
         function printJournalEntries() {
-            if (window.PrivacyMode && typeof window.PrivacyMode.isHidden === 'function' && window.PrivacyMode.isHidden()) {
-                showAlert('error', 'Privacy mode is enabled. Disable it to export or download data.');
-                return;
-            }
             const params = new URLSearchParams();
             const searchValue = document.getElementById('journalSearchInput')?.value || '';
             const dateFromValue = document.getElementById('journalDateFrom')?.value || '';
@@ -4312,12 +4307,7 @@ try {
                 toggleFinancialView();
             }
         });
-    </script>
-
-    <!-- Privacy Mode - Hide amounts with asterisks + Eye button -->
-    <script src="../includes/privacy_mode.js?v=14"></script>
-
-    <!-- Inactivity Timeout - Blur screen + Auto logout -->
+    </script><!-- Inactivity Timeout - Blur screen + Auto logout -->
     <script src="../includes/inactivity_timeout.js?v=3"></script>
 <script src="../includes/navbar_datetime.js"></script>
 <script src="../includes/tab_persistence.js?v=1"></script>

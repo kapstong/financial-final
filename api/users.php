@@ -95,8 +95,7 @@ function sanitizeUser($user) {
         'password_hash',
         'password_reset_token',
         'reset_token',
-        'reset_token_expires',
-        'two_factor_secret'
+        'reset_token_expires'
     ];
     foreach ($blockedKeys as $key) {
         if (array_key_exists($key, $user)) {

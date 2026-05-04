@@ -30,8 +30,6 @@ set_exception_handler(function($exception) {
 try {
 require_once __DIR__ . '/../includes/database.php';
 require_once __DIR__ . '/../includes/logger.php';
-require_once __DIR__ . '/../includes/mailer.php';
-require_once __DIR__ . '/../includes/privacy_guard.php';
 require_once __DIR__ . '/../includes/auth.php';
 } catch (Exception $e) {
     http_response_code(500);
@@ -99,7 +97,6 @@ function handleGet($db, $logger) {
         $format = isset($_GET['format']) ? $_GET['format'] : 'json'; // json, csv, pdf
 
         if ($format !== 'json') {
-            requirePrivacyVisible('json');
         }
 
         if (!$reportType) {
@@ -1244,28 +1241,16 @@ function handleEmailReport($db, $logger, $data) {
         $subject = "ATIERA Finance - {$reportName}";
         $message = buildReportEmailBody($reportName, $reportType, $reportData, $dateFrom, $dateTo);
 
-        // Send email using Mailer class
-        $mailer = Mailer::getInstance();
-        $sent = $mailer->send($email, $subject, $message, ['html' => true]);
-
-        if ($sent) {
-            // Log the action
-            if ($logger) {
-                $logger->log("Report '{$reportName}' emailed to {$email} by user " . ($_SESSION['user']['username'] ?? 'unknown'), 'INFO');
-            }
-
-            http_response_code(200);
-            echo json_encode([
-                'success' => true,
-                'message' => "Report successfully sent to {$email}"
-            ]);
-        } else {
-            http_response_code(500);
-            echo json_encode([
-                'success' => false,
-                'error' => 'Failed to send email. Please check email configuration.'
-            ]);
+        // Email functionality disabled - log instead
+        if ($logger) {
+            $logger->log("Report '{$reportName}' would be emailed to {$email} by user " . ($_SESSION['user']['username'] ?? 'unknown') . " (mail system disabled)", 'INFO');
         }
+
+        http_response_code(200);
+        echo json_encode([
+                'success' => true,
+                'message' => "Report email request logged (mail system disabled)"
+            ]);
 
     } catch (Exception $e) {
         error_log("Error sending report email: " . $e->getMessage());

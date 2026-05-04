@@ -88,7 +88,6 @@ $csrfToken = csrf_token();
     </div>
 </nav>
 <meta name="csrf-token" content="<?php echo htmlspecialchars($csrfToken); ?>">
-<script src="<?php echo htmlspecialchars($assetPrefix . 'includes/privacy_mode.js?v=14'); ?>"></script>
 <script src="<?php echo htmlspecialchars($assetPrefix . 'includes/inactivity_timeout.js?v=4'); ?>"></script>
 <script>
     (function() {

@@ -1145,13 +1145,6 @@ $db = Database::getInstance()->getConnection();
             `;
 
             container.innerHTML = html;
-
-            // Apply privacy masking immediately to prevent flash
-            setTimeout(function() {
-                if (typeof PrivacyMode !== 'undefined') {
-                    PrivacyMode.hide();
-                }
-            }, 10);
         }
 
         // Export income statement
@@ -1480,13 +1473,6 @@ $db = Database::getInstance()->getConnection();
                     <div class="col-md-6">${liabilitiesHtml}</div>
                 </div>
             `;
-
-            // Apply privacy masking immediately to prevent flash
-            setTimeout(function() {
-                if (typeof PrivacyMode !== 'undefined') {
-                    PrivacyMode.hide();
-                }
-            }, 10);
         }
 
         // Generate cash flow statement
@@ -1802,13 +1788,6 @@ $db = Database::getInstance()->getConnection();
             `;
 
             container.innerHTML = html;
-
-            // Apply privacy masking immediately to prevent flash
-            setTimeout(function() {
-                if (typeof PrivacyMode !== 'undefined') {
-                    PrivacyMode.hide();
-                }
-            }, 10);
         }
 
         // Generate budget report
@@ -2509,7 +2488,6 @@ $db = Database::getInstance()->getConnection();
         });
     </script>
 
-    <script src="../includes/privacy_mode.js?v=14"></script>
     <script src="../includes/inactivity_timeout.js?v=3"></script>
     <script src="../includes/navbar_datetime.js"></script>
     <script src="../includes/tab_persistence.js?v=1"></script>

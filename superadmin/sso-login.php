@@ -2,7 +2,6 @@
 require_once '../config.php';
 require_once '../includes/cache.php';
 require_once '../includes/device_detector.php';
-require_once '../includes/two_factor_auth.php';
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();

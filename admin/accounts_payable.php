@@ -1729,7 +1729,7 @@ try {
         let collectiblesData = [];
 
         const CURRENCY_SYMBOL = '<?php echo "₱"; ?>';
-        const PRIVACY_VISIBLE = <?php echo (isset($_SESSION['privacy_visible']) && $_SESSION['privacy_visible']) ? 'true' : 'false'; ?>;
+        const PRIVACY_VISIBLE = true;
 
         function getCollectibleStatus(bill) {
             const status = (bill.status || '').toLowerCase();
@@ -2889,12 +2889,7 @@ try {
                 }
             }, 5000);
         }
-    </script>
-
-    <!-- Privacy Mode - Hide amounts with asterisks + Eye button -->
-    <script src="../includes/privacy_mode.js?v=14"></script>
-
-    <!-- Inactivity Timeout - Blur screen + Auto logout -->
+    </script><!-- Inactivity Timeout - Blur screen + Auto logout -->
     <script src="../includes/inactivity_timeout.js?v=3"></script>
 <script src="../includes/navbar_datetime.js"></script>
 <script src="../includes/tab_persistence.js?v=1"></script>

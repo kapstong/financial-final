@@ -7,7 +7,6 @@
 require_once '../includes/auth.php';
 require_once '../includes/pdf_generator.php';
 require_once '../includes/logger.php';
-require_once '../includes/privacy_guard.php';
 
 header('Content-Type: application/json');
 session_start();
@@ -33,7 +32,6 @@ try {
             // Generate PDF based on type and parameters
             $type = $_GET['type'] ?? '';
             $pdfGenerator = PDFGenerator::getInstance();
-            requirePrivacyVisible('json');
 
             switch ($type) {
                 case 'invoice':
@@ -88,7 +86,6 @@ try {
                 echo json_encode(['error' => 'PDF type is required']);
                 exit;
             }
-            requirePrivacyVisible('json');
 
             $pdfGenerator = PDFGenerator::getInstance();
             $result = [];

@@ -19,14 +19,8 @@ if ($debugProfile) {
 
 $qrFeatureAvailable = true;
 $qrCodesPath = __DIR__ . '/../includes/qr_codes.php';
-$mailerPath = __DIR__ . '/../includes/mailer.php';
 if (file_exists($qrCodesPath)) {
     require_once $qrCodesPath;
-} else {
-    $qrFeatureAvailable = false;
-}
-if (file_exists($mailerPath)) {
-    require_once $mailerPath;
 } else {
     $qrFeatureAvailable = false;
 }
@@ -130,16 +124,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     throw new Exception('No email address on file.');
                 }
 
-                $mailer = Mailer::getInstance();
-                $firstName = $user['first_name'] ?? '';
-                $sent = $mailer->sendVerificationCode($email, $code, $firstName);
-                if (!$sent) {
-                    throw new Exception($mailer->getLastError() ?: 'Unable to send verification email.');
-                }
-
                 $qrMaskedEmail = maskEmail($email);
-                $message = 'Verification code sent to ' . $qrMaskedEmail . '.';
-                $messageType = 'success';
+                $message = 'Email verification is disabled. You can proceed without verification.';
+                $messageType = 'info';
             } catch (Exception $e) {
                 $message = 'Failed to send verification code: ' . $e->getMessage();
                 $messageType = 'danger';
@@ -190,14 +177,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $_SESSION['qr_email_code_time'] = time();
                         $email = $user['email'] ?? '';
                         if ($email) {
-                            $mailer = Mailer::getInstance();
-                            $firstName = $user['first_name'] ?? '';
-                            $sent = $mailer->sendVerificationCode($email, $code, $firstName);
-                            if (!$sent) {
-                                throw new Exception($mailer->getLastError() ?: 'Unable to send verification email.');
-                            }
                             $qrMaskedEmail = maskEmail($email);
-                            $message = 'Verification required. We sent a code to ' . $qrMaskedEmail . '.';
+                            $message = 'Email verification is disabled. You can proceed.';
+                            $messageType = 'info';
                         }
                     }
                 } else {
@@ -1136,8 +1118,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="../includes/alert-modal.js"></script>
-    <script src="../includes/privacy_mode.js?v=14"></script>
-
     <div class="modal fade" id="activityLogModal" tabindex="-1" aria-labelledby="activityLogModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-xl modal-dialog-scrollable">
             <div class="modal-content">

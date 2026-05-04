@@ -1028,7 +1028,6 @@ $departments = [
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="../includes/alert-modal.js"></script>
-    <script src="../includes/privacy_mode.js?v=14"></script>
     <script>
         function showDepartmentsAlert(message, type) {
             const alert = `

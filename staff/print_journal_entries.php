@@ -1,14 +1,11 @@
 <?php
 require_once '../includes/auth.php';
 require_once '../includes/database.php';
-require_once '../includes/privacy_guard.php';
 require_once '../includes/logger.php';
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
-
-requirePrivacyVisible('html');
 
 $db = Database::getInstance()->getConnection();
 

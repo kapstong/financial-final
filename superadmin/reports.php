@@ -3119,7 +3119,6 @@ require_once '../includes/database.php';
         })();
     </script>
 
-    <script src="../includes/privacy_mode.js?v=14"></script>
     <script src="../includes/inactivity_timeout.js?v=3"></script>
 <script src="../includes/navbar_datetime.js"></script>
 <script src="../includes/tab_persistence.js?v=1"></script>

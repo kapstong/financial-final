@@ -6,7 +6,6 @@
 
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/file_upload.php';
-require_once __DIR__ . '/includes/privacy_guard.php';
 
 session_start();
 
@@ -16,8 +15,6 @@ if (!isset($_SESSION['user'])) {
     echo 'Unauthorized access';
     exit;
 }
-
-requirePrivacyVisible('text');
 
 if (!isset($_GET['file_id'])) {
     header('HTTP/1.1 400 Bad Request');
