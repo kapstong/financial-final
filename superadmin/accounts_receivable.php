@@ -2095,6 +2095,39 @@ try {
             }
         }
 
+        // Helper function to clean export values by removing currency symbols
+        function cleanExportValue(value) {
+            if (value === null || value === undefined || value === '') return '';
+            
+            const stringVal = String(value);
+            
+            // Remove currency symbols (₱, $, PHP, etc)
+            let cleaned = stringVal
+                .replace(/₱/g, '')
+                .replace(/PHP\s?/gi, '')
+                .replace(/\$/g, '')
+                .trim();
+            
+            // If it looks like a number, return just the number without commas
+            if (/^[\d,.\s-%()]+$/.test(cleaned)) {
+                // Remove commas and spaces, keep the number as-is
+                cleaned = cleaned.replace(/,/g, '').trim();
+                
+                // If it's a percentage, keep the % sign
+                if (cleaned.endsWith('%')) {
+                    return cleaned;
+                }
+                
+                // Try to parse as number to validate
+                const num = parseFloat(cleaned);
+                if (!isNaN(num)) {
+                    return num.toString();
+                }
+            }
+            
+            return cleaned;
+        }
+
         // Helper function to generate CSV content
         function generateCSV(headers, data) {
             const csvRows = [];
@@ -2106,8 +2139,9 @@ try {
             data.forEach(row => {
                 const csvRow = headers.map(header => {
                     const value = row[header] || '';
-                    // Escape quotes and wrap in quotes
-                    const escapedValue = String(value).replace(/"/g, '""');
+                    // Clean the value and escape quotes
+                    const cleanedValue = cleanExportValue(value);
+                    const escapedValue = String(cleanedValue).replace(/"/g, '""');
                     return `"${escapedValue}"`;
                 });
                 csvRows.push(csvRow.join(','));

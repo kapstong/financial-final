@@ -1147,6 +1147,39 @@ $db = Database::getInstance()->getConnection();
             container.innerHTML = html;
         }
 
+        // Helper function to clean export values by removing currency symbols
+        function cleanExportValue(value) {
+            if (value === null || value === undefined || value === '') return '';
+            
+            const stringVal = String(value);
+            
+            // Remove currency symbols (₱, $, PHP, etc)
+            let cleaned = stringVal
+                .replace(/₱/g, '')
+                .replace(/PHP\s?/gi, '')
+                .replace(/\$/g, '')
+                .trim();
+            
+            // If it looks like a number, return just the number without commas
+            if (/^[\d,.\s-%()]+$/.test(cleaned)) {
+                // Remove commas and spaces, keep the number as-is
+                cleaned = cleaned.replace(/,/g, '').trim();
+                
+                // If it's a percentage, keep the % sign
+                if (cleaned.endsWith('%')) {
+                    return cleaned;
+                }
+                
+                // Try to parse as number to validate
+                const num = parseFloat(cleaned);
+                if (!isNaN(num)) {
+                    return num.toString();
+                }
+            }
+            
+            return cleaned;
+        }
+
         // Export income statement
         function exportIncomeStatement(format) {
             format = format || 'csv'; // default to CSV
@@ -1183,21 +1216,21 @@ $db = Database::getInstance()->getConnection();
             csvContent += 'Account,Amount\n';
             if (currentIncomeStatementData.revenue.accounts) {
                 currentIncomeStatementData.revenue.accounts.forEach(account => {
-                    csvContent += `"${account.account_name}","${account.amount}"\n`;
+                    csvContent += `"${account.account_name}","${cleanExportValue(account.amount)}"\n`;
                 });
             }
-            csvContent += `"Total Revenue","${currentIncomeStatementData.revenue.total}"\n\n`;
+            csvContent += `"Total Revenue","${cleanExportValue(currentIncomeStatementData.revenue.total)}"\n\n`;
 
             csvContent += 'Expenses\n';
             csvContent += 'Account,Amount\n';
             if (currentIncomeStatementData.expenses.accounts) {
                 currentIncomeStatementData.expenses.accounts.forEach(account => {
-                    csvContent += `"${account.account_name}","${account.amount}"\n`;
+                    csvContent += `"${account.account_name}","${cleanExportValue(account.amount)}"\n`;
                 });
             }
-            csvContent += `"Total Expenses","${currentIncomeStatementData.expenses.total}"\n\n`;
+            csvContent += `"Total Expenses","${cleanExportValue(currentIncomeStatementData.expenses.total)}"\n\n`;
 
-            csvContent += `"Net Profit","${currentIncomeStatementData.net_profit}"\n`;
+            csvContent += `"Net Profit","${cleanExportValue(currentIncomeStatementData.net_profit)}"\n`;
 
             // Download CSV
             const encodedUri = encodeURI(csvContent);
@@ -1962,32 +1995,32 @@ $db = Database::getInstance()->getConnection();
             csvContent += 'Account,Amount\n';
             if (currentBalanceSheetData.assets.accounts) {
                 currentBalanceSheetData.assets.accounts.forEach(account => {
-                    csvContent += `"${account.account_name}","${account.account_balance || 0}"\n`;
+                    csvContent += `"${account.account_name}","${cleanExportValue(account.account_balance || 0)}"\n`;
                 });
             }
-            csvContent += `"Total Assets","${currentBalanceSheetData.assets.total}"\n\n`;
+            csvContent += `"Total Assets","${cleanExportValue(currentBalanceSheetData.assets.total)}"\n\n`;
 
             // Liabilities section
             csvContent += 'LIABILITIES\n';
             csvContent += 'Account,Amount\n';
             if (currentBalanceSheetData.liabilities.accounts) {
                 currentBalanceSheetData.liabilities.accounts.forEach(account => {
-                    csvContent += `"${account.account_name}","${account.account_balance || 0}"\n`;
+                    csvContent += `"${account.account_name}","${cleanExportValue(account.account_balance || 0)}"\n`;
                 });
             }
-            csvContent += `"Total Liabilities","${currentBalanceSheetData.liabilities.total}"\n\n`;
+            csvContent += `"Total Liabilities","${cleanExportValue(currentBalanceSheetData.liabilities.total)}"\n\n`;
 
             // Equity section
             csvContent += 'EQUITY\n';
             csvContent += 'Account,Amount\n';
             if (currentBalanceSheetData.equity.accounts) {
                 currentBalanceSheetData.equity.accounts.forEach(account => {
-                    csvContent += `"${account.account_name}","${account.account_balance || 0}"\n`;
+                    csvContent += `"${account.account_name}","${cleanExportValue(account.account_balance || 0)}"\n`;
                 });
             }
-            csvContent += `"Total Equity","${currentBalanceSheetData.equity.total}"\n\n`;
+            csvContent += `"Total Equity","${cleanExportValue(currentBalanceSheetData.equity.total)}"\n\n`;
 
-            csvContent += `"Total Liabilities & Equity","${currentBalanceSheetData.liabilities.total + currentBalanceSheetData.equity.total}"\n`;
+            csvContent += `"Total Liabilities & Equity","${cleanExportValue(currentBalanceSheetData.liabilities.total + currentBalanceSheetData.equity.total)}"\n`;
 
             // Download CSV
             const encodedUri = encodeURI(csvContent);
@@ -2040,29 +2073,29 @@ $db = Database::getInstance()->getConnection();
 
             if (operating.revenue && operating.revenue.length > 0) {
                 operating.revenue.forEach(rev => {
-                    csvContent += `"${rev.name}","${rev.amount || 0}"\n`;
+                    csvContent += `"${rev.name}","${cleanExportValue(rev.amount || 0)}"\n`;
                 });
             }
-            csvContent += `"Total Revenue","${operating.total_revenue || 0}"\n\n`;
+            csvContent += `"Total Revenue","${cleanExportValue(operating.total_revenue || 0)}"\n\n`;
 
             csvContent += 'Cash Outflows (Operating Expenses)\n';
             csvContent += 'Category,Source System,Amount\n';
             if (operating.expenses_by_category && operating.expenses_by_category.length > 0) {
                 operating.expenses_by_category.forEach(expense => {
-                    csvContent += `"${expense.name}","${expense.sources || 'N/A'}","${expense.amount || 0}"\n`;
+                    csvContent += `"${expense.name}","${expense.sources || 'N/A'}","${cleanExportValue(expense.amount || 0)}"\n`;
                 });
             }
-            csvContent += `"Total Operating Expenses","","${operating.total_expenses || 0}"\n\n`;
+            csvContent += `"Total Operating Expenses","","${cleanExportValue(operating.total_expenses || 0)}"\n\n`;
 
             csvContent += 'Detailed Expense Breakdown by Department\n';
             csvContent += 'Department,Category,Source,Amount,Transactions\n';
             if (operating.expense_details && operating.expense_details.length > 0) {
                 operating.expense_details.forEach(detail => {
-                    csvContent += `"${detail.department || 'General'}","${detail.expense_category}","${detail.source_system}","${detail.amount || 0}","${detail.transaction_count}"\n`;
+                    csvContent += `"${detail.department || 'General'}","${detail.expense_category}","${detail.source_system}","${cleanExportValue(detail.amount || 0)}","${detail.transaction_count}"\n`;
                 });
             }
 
-            csvContent += `\n"Net Cash from Operating Activities","","","${operating.amount}"\n\n`;
+            csvContent += `\n"Net Cash from Operating Activities","","","${cleanExportValue(operating.amount)}"\n\n`;
 
             // Investing Activities - use top-level structure
             csvContent += 'INVESTING ACTIVITIES\n';
@@ -2070,10 +2103,10 @@ $db = Database::getInstance()->getConnection();
             const investing = currentCashFlowData.investing_activities;
             if (investing.accounts) {
                 investing.accounts.forEach(account => {
-                    csvContent += `"${account.account_name}","${account.amount || 0}"\n`;
+                    csvContent += `"${account.account_name}","${cleanExportValue(account.amount || 0)}"\n`;
                 });
             }
-            csvContent += `"Net Cash from Investing Activities","${investing.amount}"\n\n`;
+            csvContent += `"Net Cash from Investing Activities","${cleanExportValue(investing.amount)}"\n\n`;
 
             // Financing Activities - use top-level structure
             csvContent += 'FINANCING ACTIVITIES\n';
@@ -2081,12 +2114,12 @@ $db = Database::getInstance()->getConnection();
             const financing = currentCashFlowData.financing_activities;
             if (financing.accounts) {
                 financing.accounts.forEach(account => {
-                    csvContent += `"${account.account_name}","${account.amount || 0}"\n`;
+                    csvContent += `"${account.account_name}","${cleanExportValue(account.amount || 0)}"\n`;
                 });
             }
-            csvContent += `"Net Cash from Financing Activities","${financing.amount}"\n\n`;
+            csvContent += `"Net Cash from Financing Activities","${cleanExportValue(financing.amount)}"\n\n`;
 
-            csvContent += `"Net Change in Cash","${currentCashFlowData.net_cash_flow}"\n`;
+            csvContent += `"Net Change in Cash","${cleanExportValue(currentCashFlowData.net_cash_flow)}"\n`;
 
             // Download CSV
             const encodedUri = encodeURI(csvContent);

@@ -3185,6 +3185,41 @@ if ($budgetRequestedByName === '') {
                 .replace(/'/g, '&#39;');
         }
 
+        /**
+         * Clean export values by removing currency symbols and formatting
+         */
+        function cleanExportValue(value) {
+            if (value === null || value === undefined || value === '') return '';
+            
+            const stringVal = String(value);
+            
+            // Remove currency symbols (₱, $, PHP, etc)
+            let cleaned = stringVal
+                .replace(/₱/g, '')
+                .replace(/PHP\s?/gi, '')
+                .replace(/\$/g, '')
+                .trim();
+            
+            // If it looks like a number, return just the number without commas
+            if (/^[\d,.\s-%()]+$/.test(cleaned)) {
+                // Remove commas and spaces, keep the number as-is
+                cleaned = cleaned.replace(/,/g, '').trim();
+                
+                // If it's a percentage, keep the % sign
+                if (cleaned.endsWith('%')) {
+                    return cleaned;
+                }
+                
+                // Try to parse as number to validate
+                const num = parseFloat(cleaned);
+                if (!isNaN(num)) {
+                    return num.toString();
+                }
+            }
+            
+            return cleaned;
+        }
+
         function buildReportSummaryItems(items) {
             return `
                 <div class="report-summary-grid">
@@ -3235,7 +3270,9 @@ if ($budgetRequestedByName === '') {
             const csv = [
                 headers.join(','),
                 ...currentReport.rows.map(row => headers.map(header => {
-                    const normalized = String(row[header] ?? '').replace(/"/g, '""');
+                    const rawValue = row[header] ?? '';
+                    const cleanedValue = cleanExportValue(rawValue);
+                    const normalized = String(cleanedValue).replace(/"/g, '""');
                     return `"${normalized}"`;
                 }).join(','))
             ].join('\n');

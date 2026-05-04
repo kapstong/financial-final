@@ -2179,6 +2179,39 @@ try {
         }
 
         // Generate CSV content from data
+        // Helper function to clean export values by removing currency symbols
+        function cleanExportValue(value) {
+            if (value === null || value === undefined || value === '') return '';
+            
+            const stringVal = String(value);
+            
+            // Remove currency symbols (₱, $, PHP, etc)
+            let cleaned = stringVal
+                .replace(/₱/g, '')
+                .replace(/PHP\s?/gi, '')
+                .replace(/\$/g, '')
+                .trim();
+            
+            // If it looks like a number, return just the number without commas
+            if (/^[\d,.\s-%()]+$/.test(cleaned)) {
+                // Remove commas and spaces, keep the number as-is
+                cleaned = cleaned.replace(/,/g, '').trim();
+                
+                // If it's a percentage, keep the % sign
+                if (cleaned.endsWith('%')) {
+                    return cleaned;
+                }
+                
+                // Try to parse as number to validate
+                const num = parseFloat(cleaned);
+                if (!isNaN(num)) {
+                    return num.toString();
+                }
+            }
+            
+            return cleaned;
+        }
+
         function generateCSV(type, data) {
             let headers = [];
             let rows = [];
@@ -2191,8 +2224,8 @@ try {
                         item.vendor_name || 'Unknown',
                         item.bill_date || '',
                         item.due_date || '',
-                        parseFloat(item.amount || item.total_amount || 0).toFixed(2),
-                        parseFloat(item.balance || 0).toFixed(2),
+                        cleanExportValue(parseFloat(item.amount || item.total_amount || 0).toFixed(2)),
+                        cleanExportValue(parseFloat(item.balance || 0).toFixed(2)),
                         item.status || 'Draft',
                         item.vendor_code || ''
                     ]);
@@ -2203,7 +2236,7 @@ try {
                     rows = data.map(item => [
                         item.payment_number || item.reference_number,
                         item.vendor_name || 'Unknown',
-                        parseFloat(item.amount || 0).toFixed(2),
+                        cleanExportValue(parseFloat(item.amount || 0).toFixed(2)),
                         item.payment_method ? item.payment_method.replace('_', ' ').toUpperCase() : 'Unknown',
                         item.payment_date || '',
                         item.reference_number || '',
@@ -2219,7 +2252,7 @@ try {
                         item.vendor_name || 'Unknown',
                         item.bill_date || '',
                         item.due_date || '',
-                        parseFloat(item.balance || 0).toFixed(2),
+                        cleanExportValue(parseFloat(item.balance || 0).toFixed(2)),
                         item.days_past_due || 0,
                         item.aging_bucket || 'Unknown',
                         item.status || 'Draft'
