@@ -1342,8 +1342,8 @@ if ($budgetRequestedByName === '') {
                                 <h6>Recent Approvals</h6>
                             </div>
                             <div class="card-body">
-                                <ul class="list-unstyled mb-0">
-                                      <li class=\"text-muted\">No recent approvals available.</li>
+                                <ul class="list-unstyled mb-0" id="recentApprovalsList">
+                                      <li class="text-muted">No recent approvals available.</li>
                                   </ul>
                             </div>
                         </div>
@@ -1572,6 +1572,7 @@ if ($budgetRequestedByName === '') {
 
             if (currentBudgets.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No budgets found. Create your first budget.</td></tr>';
+                renderRecentApprovals();
                 return;
             }
 
@@ -1603,6 +1604,57 @@ if ($budgetRequestedByName === '') {
                 `;
                 tbody.innerHTML += row;
             });
+
+            renderRecentApprovals();
+        }
+
+        function renderRecentApprovals() {
+            const list = document.getElementById('recentApprovalsList');
+            if (!list) {
+                return;
+            }
+
+            const adjustmentDecisions = (currentAdjustments || [])
+                .filter(item => ['approved', 'rejected'].includes(String(item.status || '').toLowerCase()))
+                .map(item => ({
+                    type: 'Adjustment',
+                    status: String(item.status || '').toLowerCase(),
+                    label: `${item.department_name || 'Unassigned'} - PHP ${parseFloat(item.amount || 0).toLocaleString()}`,
+                    date: item.updated_at || item.effective_date || item.created_at || ''
+                }));
+
+            const budgetApprovals = (currentBudgets || [])
+                .filter(item => {
+                    const status = String(item.status || '').toLowerCase();
+                    return status === 'approved' || (status === 'active' && item.approved_by_name);
+                })
+                .map(item => ({
+                    type: 'Budget',
+                    status: 'approved',
+                    label: item.name || item.budget_name || `Budget #${item.id}`,
+                    date: item.updated_at || item.created_at || item.start_date || ''
+                }));
+
+            const rows = [...adjustmentDecisions, ...budgetApprovals]
+                .sort((left, right) => String(right.date || '').localeCompare(String(left.date || '')))
+                .slice(0, 5);
+
+            if (!rows.length) {
+                list.innerHTML = '<li class="text-muted">No recent approvals available.</li>';
+                return;
+            }
+
+            list.innerHTML = rows.map(item => {
+                const badgeClass = item.status === 'approved' ? 'bg-success' : 'bg-danger';
+                const statusLabel = item.status.charAt(0).toUpperCase() + item.status.slice(1);
+                const dateLabel = item.date ? new Date(item.date).toLocaleDateString() : 'No date';
+                return `
+                    <li class="mb-2 d-flex justify-content-between gap-3">
+                        <span><strong>${item.type}</strong>: ${item.label}<br><small class="text-muted">${dateLabel}</small></span>
+                        <span class="badge ${badgeClass} align-self-start">${statusLabel}</span>
+                    </li>
+                `;
+            }).join('');
         }
 
         // Load allocations
@@ -1782,6 +1834,7 @@ if ($budgetRequestedByName === '') {
 
             if (currentAdjustments.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No adjustment requests available.</td></tr>';
+                renderRecentApprovals();
                 return;
             }
 
@@ -1813,6 +1866,8 @@ if ($budgetRequestedByName === '') {
                 `;
                 tbody.innerHTML += row;
             });
+
+            renderRecentApprovals();
         }
 
         // Load tracking data
@@ -2904,12 +2959,31 @@ if ($budgetRequestedByName === '') {
         }
 
         function formatAuditDetails(log, targetLabel, newValues) {
-            const actionLabel = log.action ? log.action.charAt(0).toUpperCase() + log.action.slice(1) : 'Action';
+            const action = getBudgetAuditAction(log, newValues, null);
+            const actionLabel = action ? action.charAt(0).toUpperCase() + action.slice(1) : 'Action';
             let detail = log.action_description || `${actionLabel} ${targetLabel}`;
             if (newValues && newValues.reason) {
                 detail += ` - ${newValues.reason}`;
             }
             return detail;
+        }
+
+        function getBudgetAuditAction(log, newValues, oldValues) {
+            const rawAction = String(log.action || '').toLowerCase();
+            if (['approved', 'rejected', 'requested', 'created', 'updated', 'deleted'].includes(rawAction)) {
+                return rawAction;
+            }
+
+            const status = String((newValues && newValues.status) || (oldValues && oldValues.status) || '').toLowerCase();
+            if (['approved', 'rejected', 'requested'].includes(status)) {
+                return status;
+            }
+
+            return rawAction || 'viewed';
+        }
+
+        function formatBudgetAuditAction(action) {
+            return String(action || 'N/A').replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
         }
 
         function formatAuditSource(log, newValues, oldValues) {
@@ -2958,7 +3032,7 @@ if ($budgetRequestedByName === '') {
                         <tr>
                             <td>${timestamp}</td>
                             <td>${user}</td>
-                            <td>${log.action || 'N/A'}</td>
+                            <td>${formatBudgetAuditAction(getBudgetAuditAction(log, newValues, oldValues))}</td>
                             <td>${targetLabel}</td>
                             <td>${details}</td>
                             <td>${source}</td>

@@ -1341,8 +1341,8 @@ if ($budgetRequestedByName === '') {
                                 <h6>Recent Approvals</h6>
                             </div>
                             <div class="card-body">
-                                <ul class="list-unstyled mb-0">
-                                      <li class=\"text-muted\">No recent approvals available.</li>
+                                <ul class="list-unstyled mb-0" id="recentApprovalsList">
+                                      <li class="text-muted">No recent approvals available.</li>
                                   </ul>
                             </div>
                         </div>
@@ -1571,6 +1571,7 @@ if ($budgetRequestedByName === '') {
 
             if (currentBudgets.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No budgets found. Create your first budget.</td></tr>';
+                renderRecentApprovals();
                 return;
             }
 
@@ -1602,6 +1603,57 @@ if ($budgetRequestedByName === '') {
                 `;
                 tbody.innerHTML += row;
             });
+
+            renderRecentApprovals();
+        }
+
+        function renderRecentApprovals() {
+            const list = document.getElementById('recentApprovalsList');
+            if (!list) {
+                return;
+            }
+
+            const adjustmentDecisions = (currentAdjustments || [])
+                .filter(item => ['approved', 'rejected'].includes(String(item.status || '').toLowerCase()))
+                .map(item => ({
+                    type: 'Adjustment',
+                    status: String(item.status || '').toLowerCase(),
+                    label: `${item.department_name || 'Unassigned'} - PHP ${parseFloat(item.amount || 0).toLocaleString()}`,
+                    date: item.updated_at || item.effective_date || item.created_at || ''
+                }));
+
+            const budgetApprovals = (currentBudgets || [])
+                .filter(item => {
+                    const status = String(item.status || '').toLowerCase();
+                    return status === 'approved' || (status === 'active' && item.approved_by_name);
+                })
+                .map(item => ({
+                    type: 'Budget',
+                    status: 'approved',
+                    label: item.name || item.budget_name || `Budget #${item.id}`,
+                    date: item.updated_at || item.created_at || item.start_date || ''
+                }));
+
+            const rows = [...adjustmentDecisions, ...budgetApprovals]
+                .sort((left, right) => String(right.date || '').localeCompare(String(left.date || '')))
+                .slice(0, 5);
+
+            if (!rows.length) {
+                list.innerHTML = '<li class="text-muted">No recent approvals available.</li>';
+                return;
+            }
+
+            list.innerHTML = rows.map(item => {
+                const badgeClass = item.status === 'approved' ? 'bg-success' : 'bg-danger';
+                const statusLabel = item.status.charAt(0).toUpperCase() + item.status.slice(1);
+                const dateLabel = item.date ? new Date(item.date).toLocaleDateString() : 'No date';
+                return `
+                    <li class="mb-2 d-flex justify-content-between gap-3">
+                        <span><strong>${item.type}</strong>: ${item.label}<br><small class="text-muted">${dateLabel}</small></span>
+                        <span class="badge ${badgeClass} align-self-start">${statusLabel}</span>
+                    </li>
+                `;
+            }).join('');
         }
 
         // Load allocations
@@ -1781,6 +1833,7 @@ if ($budgetRequestedByName === '') {
 
             if (currentAdjustments.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No adjustment requests available.</td></tr>';
+                renderRecentApprovals();
                 return;
             }
 
@@ -1812,6 +1865,8 @@ if ($budgetRequestedByName === '') {
                 `;
                 tbody.innerHTML += row;
             });
+
+            renderRecentApprovals();
         }
 
         // Load tracking data
@@ -2904,12 +2959,31 @@ if ($budgetRequestedByName === '') {
         }
 
         function formatAuditDetails(log, targetLabel, newValues) {
-            const actionLabel = log.action ? log.action.charAt(0).toUpperCase() + log.action.slice(1) : 'Action';
+            const action = getBudgetAuditAction(log, newValues, null);
+            const actionLabel = action ? action.charAt(0).toUpperCase() + action.slice(1) : 'Action';
             let detail = log.action_description || `${actionLabel} ${targetLabel}`;
             if (newValues && newValues.reason) {
                 detail += ` - ${newValues.reason}`;
             }
             return detail;
+        }
+
+        function getBudgetAuditAction(log, newValues, oldValues) {
+            const rawAction = String(log.action || '').toLowerCase();
+            if (['approved', 'rejected', 'requested', 'created', 'updated', 'deleted'].includes(rawAction)) {
+                return rawAction;
+            }
+
+            const status = String((newValues && newValues.status) || (oldValues && oldValues.status) || '').toLowerCase();
+            if (['approved', 'rejected', 'requested'].includes(status)) {
+                return status;
+            }
+
+            return rawAction || 'viewed';
+        }
+
+        function formatBudgetAuditAction(action) {
+            return String(action || 'N/A').replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
         }
 
         function formatAuditSource(log, newValues, oldValues) {
@@ -2958,7 +3032,7 @@ if ($budgetRequestedByName === '') {
                         <tr>
                             <td>${timestamp}</td>
                             <td>${user}</td>
-                            <td>${log.action || 'N/A'}</td>
+                            <td>${formatBudgetAuditAction(getBudgetAuditAction(log, newValues, oldValues))}</td>
                             <td>${targetLabel}</td>
                             <td>${details}</td>
                             <td>${source}</td>
@@ -4282,11 +4356,12 @@ if ($budgetRequestedByName === '') {
                 const source = formatAuditSource(log, newValues, oldValues);
                 const timestamp = log.formatted_date || new Date(log.created_at).toLocaleString();
                 const user = log.full_name || log.username || 'Unknown';
+                const action = getBudgetAuditAction(log, newValues, oldValues);
                 return `
                     <tr>
                         <td>${timestamp}</td>
                         <td>${user}</td>
-                        <td>${log.action || 'N/A'}</td>
+                        <td>${formatBudgetAuditAction(action)}</td>
                         <td>${targetLabel}</td>
                         <td>${details}</td>
                         <td>${source}</td>
@@ -4304,14 +4379,16 @@ if ($budgetRequestedByName === '') {
             const target = (document.getElementById('budgetAuditTarget')?.value || '').toLowerCase();
 
             return currentBudgetAuditRows.filter(log => {
+                const newValues = parseAuditValues(log.new_values);
+                const oldValues = parseAuditValues(log.old_values);
                 const createdAt = String(log.created_at || '');
                 const userValue = String(log.full_name || log.username || '').toLowerCase();
-                const actionValue = String(log.action || '').toLowerCase();
+                const actionValue = getBudgetAuditAction(log, newValues, oldValues);
                 const targetValue = String(log.action_description || log.table_name || '').toLowerCase();
                 if (dateFrom && createdAt.slice(0, 10) < dateFrom) return false;
                 if (dateTo && createdAt.slice(0, 10) > dateTo) return false;
                 if (user && !userValue.includes(user)) return false;
-                if (action && !actionValue.includes(action)) return false;
+                if (action && actionValue !== action) return false;
                 if (target && !targetValue.includes(target)) return false;
                 return true;
             });
@@ -4337,7 +4414,7 @@ if ($budgetRequestedByName === '') {
                     return [
                         log.formatted_date || new Date(log.created_at).toLocaleString(),
                         log.full_name || log.username || 'Unknown',
-                        log.action || '',
+                        formatBudgetAuditAction(getBudgetAuditAction(log, newValues, oldValues)),
                         formatAuditTarget(log, newValues, oldValues),
                         formatAuditDetails(log, formatAuditTarget(log, newValues, oldValues), newValues),
                         formatAuditSource(log, newValues, oldValues),
@@ -4377,7 +4454,16 @@ if ($budgetRequestedByName === '') {
                     </div>
                     <div class="col-md-2">
                         <label class="form-label">Action</label>
-                        <input type="text" class="form-control" id="budgetAuditAction" placeholder="Search action">
+                        <select class="form-select" id="budgetAuditAction">
+                            <option value="">All Actions</option>
+                            <option value="created">Created</option>
+                            <option value="requested">Requested</option>
+                            <option value="updated">Updated</option>
+                            <option value="approved">Approved</option>
+                            <option value="rejected">Rejected</option>
+                            <option value="deleted">Deleted</option>
+                            <option value="viewed">Viewed</option>
+                        </select>
                     </div>
                     <div class="col-md-2">
                         <label class="form-label">Target</label>
@@ -4414,6 +4500,9 @@ if ($budgetRequestedByName === '') {
             });
             ['budgetAuditDateFrom', 'budgetAuditDateTo', 'budgetAuditUser', 'budgetAuditAction', 'budgetAuditTarget'].forEach(id => {
                 document.getElementById(id)?.addEventListener('input', function() {
+                    renderBudgetAuditRows(getFilteredBudgetAuditRows());
+                });
+                document.getElementById(id)?.addEventListener('change', function() {
                     renderBudgetAuditRows(getFilteredBudgetAuditRows());
                 });
             });

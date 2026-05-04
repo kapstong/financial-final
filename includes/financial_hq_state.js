@@ -556,7 +556,12 @@
                 if (String(item.id) !== String(adjustmentId)) {
                     return item;
                 }
-                return { ...item, status: status };
+                return {
+                    ...item,
+                    status: status,
+                    updated_at: new Date().toISOString(),
+                    approved_by_name: item.approved_by_name || 'Finance Team'
+                };
             });
 
             if (target && status === 'approved') {
