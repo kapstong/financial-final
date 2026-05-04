@@ -2935,33 +2935,75 @@ if ($budgetRequestedByName === '') {
             }
         }
 
+        function auditFirstValue(...values) {
+            for (const value of values) {
+                if (value !== null && value !== undefined && String(value).trim() !== '' && String(value).trim().toUpperCase() !== 'N/A') {
+                    return String(value).trim();
+                }
+            }
+            return '';
+        }
+
+        function auditRecordId(log, newValues, oldValues) {
+            return auditFirstValue(
+                log.record_id,
+                newValues?.id,
+                newValues?.budget_id,
+                newValues?.item_id,
+                newValues?.adjustment_id,
+                newValues?.category_id,
+                oldValues?.id,
+                oldValues?.budget_id,
+                oldValues?.item_id,
+                oldValues?.adjustment_id,
+                oldValues?.category_id
+            );
+        }
+
+        function auditTableLabel(tableName) {
+            const labels = {
+                budgets: 'Budget',
+                budget_items: 'Budget Item',
+                budget_adjustments: 'Budget Adjustment',
+                budget_categories: 'Budget Category',
+                hr3_integrations: 'Claims Integration'
+            };
+            return labels[tableName] || String(tableName || 'Audit Record').replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
+        }
+
         function formatAuditTarget(log, newValues, oldValues) {
-            const recordId = log.record_id || 'N/A';
+            const recordId = auditRecordId(log, newValues, oldValues);
             switch (log.table_name) {
                 case 'budgets': {
-                    const name = (newValues && (newValues.budget_name || newValues.name)) ||
-                        (oldValues && (oldValues.budget_name || oldValues.name));
-                    return name ? `Budget: ${name}` : `Budget #${recordId}`;
+                    const name = auditFirstValue(newValues?.budget_name, newValues?.name, oldValues?.budget_name, oldValues?.name);
+                    return name ? `Budget: ${name}` : (recordId ? `Budget #${recordId}` : 'Budget record');
                 }
-                case 'budget_items':
-                    return `Budget Item #${recordId}`;
-                case 'budget_adjustments':
-                    return `Adjustment #${recordId}`;
+                case 'budget_items': {
+                    const name = auditFirstValue(newValues?.item_name, newValues?.account_name, newValues?.category_name, oldValues?.item_name, oldValues?.account_name, oldValues?.category_name);
+                    return name ? `Budget Item: ${name}` : (recordId ? `Budget Item #${recordId}` : 'Budget item record');
+                }
+                case 'budget_adjustments': {
+                    const reason = auditFirstValue(newValues?.reason, oldValues?.reason);
+                    return reason ? `Adjustment: ${reason}` : (recordId ? `Adjustment #${recordId}` : 'Budget adjustment record');
+                }
                 case 'budget_categories': {
-                    const name = (newValues && newValues.category_name) || (oldValues && oldValues.category_name);
-                    return name ? `Category: ${name}` : `Category #${recordId}`;
+                    const name = auditFirstValue(newValues?.category_name, oldValues?.category_name);
+                    return name ? `Category: ${name}` : (recordId ? `Category #${recordId}` : 'Budget category record');
                 }
                 case 'hr3_integrations':
                     return 'Claims Integration';
                 default:
-                    return log.table_name ? `${log.table_name} #${recordId}` : `Record #${recordId}`;
+                    return recordId ? `${auditTableLabel(log.table_name)} #${recordId}` : `${auditTableLabel(log.table_name)} record`;
             }
         }
 
         function formatAuditDetails(log, targetLabel, newValues) {
             const action = getBudgetAuditAction(log, newValues, null);
             const actionLabel = action ? action.charAt(0).toUpperCase() + action.slice(1) : 'Action';
-            let detail = log.action_description || `${actionLabel} ${targetLabel}`;
+            let detail = String(log.action_description || '').trim();
+            if (!detail || /\bN\/A\b/i.test(detail) || /budget\s*ID\s*$/i.test(detail)) {
+                detail = `${actionLabel} ${targetLabel}`;
+            }
             if (newValues && newValues.reason) {
                 detail += ` - ${newValues.reason}`;
             }
@@ -2983,7 +3025,7 @@ if ($budgetRequestedByName === '') {
         }
 
         function formatBudgetAuditAction(action) {
-            return String(action || 'N/A').replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
+            return String(action || 'viewed').replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
         }
 
         function formatAuditSource(log, newValues, oldValues) {

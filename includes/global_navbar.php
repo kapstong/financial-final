@@ -286,13 +286,52 @@ $privacyModeEnabled = privacyModeEnabled();
             node.parentNode.replaceChild(fragment, node);
         }
 
+        function cleanupUnavailableText(root) {
+            if (!root) return;
+            const replacements = [
+                { pattern: /#\s*N\/A\b/gi, value: 'record pending' },
+                { pattern: /\bN\/A\b/gi, value: 'Not recorded' },
+                { pattern: /\bnull\b/gi, value: 'Not recorded' },
+                { pattern: /\bundefined\b/gi, value: 'Not recorded' }
+            ];
+            function replaceTextNode(node) {
+                let value = node.nodeValue;
+                replacements.forEach(function(item) {
+                    item.pattern.lastIndex = 0;
+                    value = value.replace(item.pattern, item.value);
+                });
+                node.nodeValue = value;
+            }
+            if (root.nodeType === Node.TEXT_NODE) {
+                replaceTextNode(root);
+                return;
+            }
+            const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+                acceptNode: function(node) {
+                    const parent = node.parentElement;
+                    if (!parent || parent.closest('script, style, textarea, input, select, option')) {
+                        return NodeFilter.FILTER_REJECT;
+                    }
+                    return replacements.some(function(item) {
+                        item.pattern.lastIndex = 0;
+                        return item.pattern.test(node.nodeValue);
+                    }) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
+                }
+            });
+            const nodes = [];
+            while (walker.nextNode()) nodes.push(walker.currentNode);
+            nodes.forEach(replaceTextNode);
+        }
+
         function scanMoney(root) {
             if (!root || applyingPrivacy) return;
             applyingPrivacy = true;
             try {
                 if (root.nodeType === Node.TEXT_NODE) {
+                    cleanupUnavailableText(root);
                     wrapTextNode(root);
                 } else if (root.nodeType === Node.ELEMENT_NODE || root.nodeType === Node.DOCUMENT_NODE) {
+                    cleanupUnavailableText(root === document ? document.body : root);
                     enforcePrivacyOutputUi(root === document ? document.body : root);
                     if (privacyMode) {
                         root.querySelectorAll?.('.privacy-money').forEach(function(el) {
