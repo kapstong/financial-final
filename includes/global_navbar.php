@@ -92,6 +92,63 @@ $privacyModeEnabled = privacyModeEnabled();
         white-space: nowrap;
         box-shadow: 0 8px 20px rgba(0, 0, 0, 0.22);
     }
+    body.privacy-mode-active #forecast .forecast-card h3,
+    body.privacy-mode-active #forecast #forecastCoverageSummary,
+    body.privacy-mode-active #forecast #forecastLineageSummary,
+    body.privacy-mode-active #forecast #forecastSourceSummary,
+    body.privacy-mode-active #forecastDriversBody td:nth-child(2),
+    body.privacy-mode-active #forecastDriversBody td:nth-child(3),
+    body.privacy-mode-active #forecastDriversBody td:nth-child(4) {
+        color: transparent !important;
+        text-shadow: 0 0 12px rgba(15, 28, 73, 0.72);
+        user-select: none;
+    }
+    body.privacy-mode-active #forecast .forecast-card {
+        position: relative;
+    }
+    body.privacy-mode-active #forecast .forecast-card::after {
+        content: "Masked";
+        position: absolute;
+        right: 0.75rem;
+        top: 0.75rem;
+        padding: 0.25rem 0.55rem;
+        border-radius: 999px;
+        background: rgba(15, 28, 73, 0.86);
+        color: #fff;
+        font-size: 0.72rem;
+        font-weight: 700;
+        pointer-events: none;
+    }
+    .tab-content > .tab-pane.active {
+        max-height: calc(100vh - 260px);
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding-right: 0.35rem;
+        overscroll-behavior: contain;
+    }
+    .tab-content > .tab-pane.active .table-responsive {
+        max-height: min(56vh, 620px);
+        overflow: auto;
+        overscroll-behavior: contain;
+    }
+    .tab-content > .tab-pane.active::-webkit-scrollbar,
+    .tab-content > .tab-pane.active .table-responsive::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+    }
+    .tab-content > .tab-pane.active::-webkit-scrollbar-thumb,
+    .tab-content > .tab-pane.active .table-responsive::-webkit-scrollbar-thumb {
+        background: rgba(30, 41, 54, 0.24);
+        border-radius: 999px;
+        border: 2px solid rgba(255, 255, 255, 0.8);
+    }
+    @media (max-width: 768px) {
+        .tab-content > .tab-pane.active {
+            max-height: none;
+            overflow: visible;
+            padding-right: 0;
+        }
+    }
 </style>
 <nav class="navbar navbar-expand-lg navbar-light bg-white mb-4 shadow-sm">
     <div class="container-fluid">
