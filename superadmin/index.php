@@ -348,7 +348,7 @@ body {
     transform: rotate(0deg);
 }
 .content {
-    margin-left: 120px;
+    margin-left: 300px;
     padding: 20px;
     transition: margin-left 0.3s ease;
     position: relative;
@@ -369,7 +369,7 @@ body {
 }
 .sidebar-toggle {
     position: fixed;
-    left: 10px;
+    left: 290px;
     top: 50%;
     transform: translateY(-50%);
     cursor: pointer;

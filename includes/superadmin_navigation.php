@@ -52,7 +52,11 @@ $glExpanded = in_array($currentPage, ['general_ledger.php', 'accounts_payable.ph
         width: 120px;
     }
     .sidebar.sidebar-collapsed span {
-        display: none;
+        display: block;
+        margin-top: 4px;
+        font-size: 0.68rem;
+        line-height: 1.05;
+        overflow-wrap: anywhere;
     }
     .sidebar.sidebar-collapsed .nav-link {
         padding: 10px;
@@ -76,6 +80,11 @@ $glExpanded = in_array($currentPage, ['general_ledger.php', 'accounts_payable.ph
     }
     .sidebar .nav-link i {
         font-size: 1.4em;
+    }
+    .sidebar.sidebar-collapsed .nav-link i {
+        display: block;
+        margin: 0 auto 2px !important;
+        min-height: 1.2em;
     }
     .sidebar .nav-link:hover {
         background-color: rgba(255, 255, 255, 0.1);
@@ -107,7 +116,7 @@ $glExpanded = in_array($currentPage, ['general_ledger.php', 'accounts_payable.ph
         transform: rotate(0deg);
     }
     .content {
-        margin-left: 120px;
+        margin-left: 300px;
         padding: 20px;
         transition: margin-left 0.3s ease;
         position: relative;
@@ -128,7 +137,7 @@ $glExpanded = in_array($currentPage, ['general_ledger.php', 'accounts_payable.ph
     }
     .sidebar-toggle {
         position: fixed;
-        left: 10px;
+        left: 290px;
         top: 50%;
         transform: translateY(-50%);
         cursor: pointer;
@@ -147,6 +156,14 @@ $glExpanded = in_array($currentPage, ['general_ledger.php', 'accounts_payable.ph
     }
     .sidebar-toggle:hover {
         background-color: rgba(255, 255, 255, 0.1);
+    }
+    .sidebar-toggle::before {
+        content: attr(data-toggle-label);
+        font-size: 1.1rem;
+        line-height: 1;
+    }
+    .sidebar-toggle i {
+        display: none;
     }
     .toggle-btn {
         display: none;
@@ -596,7 +613,7 @@ $glExpanded = in_array($currentPage, ['general_ledger.php', 'accounts_payable.ph
     }
 </style>
 
-<div class="sidebar sidebar-collapsed" id="sidebar">
+<div class="sidebar" id="sidebar">
     <div class="p-3">
         <h5 class="navbar-brand"><img src="atieralogo.png" alt="Atiera Logo" style="height: 100px;"></h5>
         <hr style="border-top: 2px solid white; margin: 10px 0;">
@@ -641,8 +658,8 @@ $glExpanded = in_array($currentPage, ['general_ledger.php', 'accounts_payable.ph
         </a>
     </nav>
 </div>
-<div class="sidebar-toggle" onclick="toggleSidebarDesktop()">
-    <i class="fas fa-chevron-right" id="sidebarArrow"></i>
+<div class="sidebar-toggle" onclick="toggleSidebarDesktop()" data-toggle-label="<" role="button" aria-label="Collapse sidebar" tabindex="0">
+    <i class="fas fa-chevron-left" id="sidebarArrow"></i>
 </div>
 
 <script>
@@ -658,19 +675,23 @@ $glExpanded = in_array($currentPage, ['general_ledger.php', 'accounts_payable.ph
         const logoImg = document.querySelector('.navbar-brand img');
         sidebar.classList.toggle('sidebar-collapsed');
         const isCollapsed = sidebar.classList.contains('sidebar-collapsed');
-        localStorage.setItem('sidebarCollapsed', isCollapsed);
+        localStorage.setItem('superadminSidebarCollapsed', isCollapsed);
         if (isCollapsed) {
             logoImg.src = 'atieralogo2.png';
             content.style.marginLeft = '120px';
             arrow.classList.remove('fa-chevron-left');
             arrow.classList.add('fa-chevron-right');
             toggle.style.left = '110px';
+            toggle.dataset.toggleLabel = '>';
+            toggle.setAttribute('aria-label', 'Expand sidebar');
         } else {
             logoImg.src = 'atieralogo.png';
             content.style.marginLeft = '300px';
             arrow.classList.remove('fa-chevron-right');
             arrow.classList.add('fa-chevron-left');
             toggle.style.left = '290px';
+            toggle.dataset.toggleLabel = '<';
+            toggle.setAttribute('aria-label', 'Collapse sidebar');
         }
     }
 
@@ -681,7 +702,7 @@ $glExpanded = in_array($currentPage, ['general_ledger.php', 'accounts_payable.ph
         const arrow = document.getElementById('sidebarArrow');
         const toggle = document.querySelector('.sidebar-toggle');
         const logoImg = document.querySelector('.navbar-brand img');
-        const isCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
+        const isCollapsed = localStorage.getItem('superadminSidebarCollapsed') === 'true';
         if (isCollapsed) {
             sidebar.classList.add('sidebar-collapsed');
             logoImg.src = 'atieralogo2.png';
@@ -689,6 +710,8 @@ $glExpanded = in_array($currentPage, ['general_ledger.php', 'accounts_payable.ph
             arrow.classList.remove('fa-chevron-left');
             arrow.classList.add('fa-chevron-right');
             toggle.style.left = '110px';
+            toggle.dataset.toggleLabel = '>';
+            toggle.setAttribute('aria-label', 'Expand sidebar');
         } else {
             sidebar.classList.remove('sidebar-collapsed');
             logoImg.src = 'atieralogo.png';
@@ -696,6 +719,8 @@ $glExpanded = in_array($currentPage, ['general_ledger.php', 'accounts_payable.ph
             arrow.classList.remove('fa-chevron-right');
             arrow.classList.add('fa-chevron-left');
             toggle.style.left = '290px';
+            toggle.dataset.toggleLabel = '<';
+            toggle.setAttribute('aria-label', 'Collapse sidebar');
         }
     });
 </script>

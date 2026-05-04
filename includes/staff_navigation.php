@@ -25,7 +25,7 @@ function staffCan($permOrList) {
 ?>
 
 <!-- Staff Sidebar Navigation -->
-<div class="sidebar sidebar-collapsed" id="sidebar">
+<div class="sidebar" id="sidebar">
     <div class="p-3">
         <h5 class="navbar-brand"><img src="atieralogo.png" alt="Atiera Logo" style="height: 100px;"></h5>
     </div>
@@ -91,8 +91,9 @@ function staffCan($permOrList) {
 </div>
 
 <!-- Sidebar Toggle -->
-<div class="sidebar-toggle" onclick="toggleSidebarDesktop()">
-    <i class="fas fa-chevron-right" id="sidebarArrow"></i>
+<div class="sidebar-toggle" onclick="toggleSidebarDesktop()" role="button" aria-label="Collapse sidebar" tabindex="0">
+    <span id="sidebarToggleFallback">&lt;</span>
+    <i class="fas fa-chevron-left" id="sidebarArrow" style="display: none;"></i>
 </div>
 
 <script>
@@ -105,22 +106,27 @@ function toggleSidebarDesktop() {
     const content = document.querySelector('.content');
     const arrow = document.getElementById('sidebarArrow');
     const toggle = document.querySelector('.sidebar-toggle');
+    const fallback = document.getElementById('sidebarToggleFallback');
     const logoImg = document.querySelector('.navbar-brand img');
     sidebar.classList.toggle('sidebar-collapsed');
     const isCollapsed = sidebar.classList.contains('sidebar-collapsed');
-    localStorage.setItem('sidebarCollapsed', isCollapsed);
+    localStorage.setItem('staffSidebarCollapsed', isCollapsed);
     if (isCollapsed) {
         logoImg.src = 'atieralogo2.png';
         if (content) content.style.marginLeft = '120px';
         arrow.classList.remove('fa-chevron-left');
         arrow.classList.add('fa-chevron-right');
+        if (fallback) fallback.textContent = '>';
         toggle.style.left = '110px';
+        toggle.setAttribute('aria-label', 'Expand sidebar');
     } else {
         logoImg.src = 'atieralogo.png';
         if (content) content.style.marginLeft = '300px';
         arrow.classList.remove('fa-chevron-right');
         arrow.classList.add('fa-chevron-left');
+        if (fallback) fallback.textContent = '<';
         toggle.style.left = '290px';
+        toggle.setAttribute('aria-label', 'Collapse sidebar');
     }
 }
 
@@ -130,22 +136,27 @@ document.addEventListener('DOMContentLoaded', function() {
     const content = document.querySelector('.content');
     const arrow = document.getElementById('sidebarArrow');
     const toggle = document.querySelector('.sidebar-toggle');
+    const fallback = document.getElementById('sidebarToggleFallback');
     const logoImg = document.querySelector('.navbar-brand img');
-    const isCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
+    const isCollapsed = localStorage.getItem('staffSidebarCollapsed') === 'true';
     if (isCollapsed) {
         sidebar.classList.add('sidebar-collapsed');
         logoImg.src = 'atieralogo2.png';
         if (content) content.style.marginLeft = '120px';
         arrow.classList.remove('fa-chevron-left');
         arrow.classList.add('fa-chevron-right');
+        if (fallback) fallback.textContent = '>';
         toggle.style.left = '110px';
+        toggle.setAttribute('aria-label', 'Expand sidebar');
     } else {
         sidebar.classList.remove('sidebar-collapsed');
         logoImg.src = 'atieralogo.png';
         if (content) content.style.marginLeft = '300px';
         arrow.classList.remove('fa-chevron-right');
         arrow.classList.add('fa-chevron-left');
+        if (fallback) fallback.textContent = '<';
         toggle.style.left = '290px';
+        toggle.setAttribute('aria-label', 'Collapse sidebar');
     }
 });
 </script>
