@@ -231,16 +231,17 @@ body.atiera-loading-active .sidebar-toggle {
         "Reconciling financial records...",
         "Opening selected module..."
     ];
-    const LINK_NAVIGATION_DELAY_MS = 1800;
-    const LOADER_FALLBACK_HIDE_MS = 1800;
+    const MINIMUM_VISIBLE_MS = 1700;
+    const LOADER_FALLBACK_HIDE_MS = 3200;
 
     let progressTimer = null;
     let statusTimer = null;
     let fallbackTimer = null;
+    let hideTimer = null;
     let progress = 12;
     let visible = false;
+    let shownAt = 0;
     let phase = 0;
-    let navigationLocked = false;
 
     function setLoadingUiState(isActive) {
         const root = document.documentElement;
@@ -263,6 +264,10 @@ body.atiera-loading-active .sidebar-toggle {
         if (fallbackTimer) {
             window.clearTimeout(fallbackTimer);
             fallbackTimer = null;
+        }
+        if (hideTimer) {
+            window.clearTimeout(hideTimer);
+            hideTimer = null;
         }
     }
 
@@ -291,6 +296,7 @@ body.atiera-loading-active .sidebar-toggle {
         }
         visible = true;
         clearTimers();
+        shownAt = Date.now();
         progress = 12;
         phase = 0;
         statusLabel.textContent = customStatus || statusSteps[phase];
@@ -307,7 +313,23 @@ body.atiera-loading-active .sidebar-toggle {
         }, LOADER_FALLBACK_HIDE_MS);
     }
 
-    function hideLoader() {
+    function hideLoader(force) {
+        if (!visible && !loader.classList.contains("active")) {
+            return;
+        }
+        if (!force) {
+            const elapsed = Date.now() - shownAt;
+            const remaining = MINIMUM_VISIBLE_MS - elapsed;
+            if (remaining > 0) {
+                if (!hideTimer) {
+                    hideTimer = window.setTimeout(function () {
+                        hideTimer = null;
+                        hideLoader(true);
+                    }, remaining);
+                }
+                return;
+            }
+        }
         visible = false;
         clearTimers();
         setLoadingUiState(false);
@@ -386,20 +408,24 @@ body.atiera-loading-active .sidebar-toggle {
     if (loader.dataset.showOnLoad === "true") {
         showLoader("Preparing workspace...");
     } else {
-        hideLoader();
+        hideLoader(true);
     }
-    window.setTimeout(hideLoader, 250);
-    window.setTimeout(hideLoader, 1200);
+    window.setTimeout(hideLoader, 900);
+    window.setTimeout(function () {
+        hideLoader(true);
+    }, LOADER_FALLBACK_HIDE_MS);
 
     window.addEventListener("DOMContentLoaded", hideLoader);
     window.addEventListener("load", function () {
-        window.setTimeout(hideLoader, 120);
+        window.setTimeout(hideLoader, 350);
     });
 
     window.addEventListener("pageshow", function () {
-        hideLoader();
+        hideLoader(true);
     });
 
-    window.addEventListener("focus", hideLoader);
+    window.addEventListener("focus", function () {
+        hideLoader(true);
+    });
 })();
 </script>
