@@ -3,6 +3,14 @@
         return 'PHP ' + Math.round(Number(value || 0)).toLocaleString();
     }
 
+    function isPrivacyRedacted(resp) {
+        return !!(resp && resp.privacy_redacted);
+    }
+
+    function maskedValue() {
+        return 'Masked';
+    }
+
     function renderForecast(resp) {
         const container = document.getElementById('forecastDriversBody');
         if (!container) return;
@@ -12,11 +20,16 @@
             const forecast = resp.forecast || [];
             const model = resp.model || {};
             const method = resp.method || model.method || 'random_forest_regressor';
+            const redacted = isPrivacyRedacted(resp);
 
-            const forecastTotal = forecast.reduce((sum, item) => sum + Number(item.value || 0), 0);
             const cards = document.querySelectorAll('.forecast-card h3');
             if (cards && cards.length >= 3) {
-                cards[2].textContent = forecast.length ? formatCurrency(forecastTotal) : 'Not available';
+                if (redacted) {
+                    cards[2].textContent = maskedValue();
+                } else {
+                    const forecastTotal = forecast.reduce((sum, item) => sum + Number(item.value || 0), 0);
+                    cards[2].textContent = forecast.length ? formatCurrency(forecastTotal) : 'Not available';
+                }
             }
 
             const rows = [];
@@ -38,8 +51,8 @@
                 const projected = forecast[idx];
                 rows.push('<tr>' +
                     `<td>${(historical && historical.date) || (projected && projected.date) || ''}</td>` +
-                    `<td>${historical ? formatCurrency(historical.value) : '-'}</td>` +
-                    `<td>${projected ? formatCurrency(projected.value) : '-'}</td>` +
+                    `<td>${historical ? (redacted ? maskedValue() : formatCurrency(historical.value)) : '-'}</td>` +
+                    `<td>${projected ? (redacted ? maskedValue() : formatCurrency(projected.value)) : '-'}</td>` +
                     `<td>${projected ? 'Random Forest Regressor prediction' : 'Historical monthly outflow'}</td>` +
                     '</tr>');
             }
@@ -60,5 +73,5 @@
         return data;
     }
 
-    window.forecasting = { fetchAndRenderForecast, renderForecast };
+    window.forecasting = { fetchAndRenderForecast, renderForecast, isPrivacyRedacted, maskedValue };
 })();

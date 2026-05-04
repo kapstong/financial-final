@@ -253,6 +253,26 @@ try {
     $dbError = $e->getMessage();
     $annualBudgetTotal = 0;
 }
+
+if (function_exists('privacyModeEnabled') && privacyModeEnabled()) {
+    foreach ($chartData as &$item) {
+        $item['revenue'] = null;
+        $item['expenses'] = null;
+    }
+    unset($item);
+    foreach ($cashFlowData as &$item) {
+        $item['collections'] = null;
+        $item['disbursements'] = null;
+    }
+    unset($item);
+    foreach ($budgetActualData as &$item) {
+        $item['budgeted'] = null;
+        $item['actual'] = null;
+    }
+    unset($item);
+    $incomeAmounts = array_fill(0, count($incomeAmounts), null);
+    $annualBudgetTotal = null;
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -1246,6 +1266,7 @@ body {
                 return;
             }
 
+            const redacted = dashboardForecastState?.data?.privacy_redacted;
             const rows = [];
             history.forEach(item => {
                 const monthLabel = new Date(item.date).toLocaleDateString(undefined, { year: 'numeric', month: 'short' });
@@ -1253,9 +1274,9 @@ body {
                 rows.push(`
                     <tr>
                         <td>${monthLabel}</td>
-                        <td>${formatForecastCurrency(item.value)}</td>
-                        <td>${formatForecastCurrency(sourceBreakdown.disbursements)}</td>
-                        <td>${formatForecastCurrency(sourceBreakdown.payments_made)}</td>
+                        <td>${redacted ? 'Masked' : formatForecastCurrency(item.value)}</td>
+                        <td>${redacted ? 'Masked' : formatForecastCurrency(sourceBreakdown.disbursements)}</td>
+                        <td>${redacted ? 'Masked' : formatForecastCurrency(sourceBreakdown.payments_made)}</td>
                         <td>Recorded historical outflow for ${selectedCategory.replace('_', ' ')}</td>
                     </tr>
                 `);
@@ -1266,7 +1287,7 @@ body {
                 rows.push(`
                     <tr class="table-warning">
                         <td>${monthLabel}</td>
-                        <td>${formatForecastCurrency(item.value)}</td>
+                        <td>${redacted ? 'Masked' : formatForecastCurrency(item.value)}</td>
                         <td>-</td>
                         <td>-</td>
                         <td>Projected continuation of the selected outflow pattern</td>
@@ -1282,6 +1303,14 @@ body {
         function renderDashboardForecastSummary(data, forecast) {
             const history = data.history || [];
             const projected = forecast || data.forecast || [];
+            if (data.privacy_redacted) {
+                document.getElementById('projectedYearEnd').textContent = 'Masked';
+                document.getElementById('expectedVariance').textContent = 'Masked';
+                document.getElementById('forecastCoverageSummary').textContent = `${history.length} historical months | ${(data.summary?.selected_category || 'combined').replace('_', ' ')}`;
+                document.getElementById('forecastLineageSummary').textContent = `${(data.method || data.model?.method || 'random_forest_regressor').replaceAll('_', ' ')}`;
+                document.getElementById('forecastSourceSummary').textContent = 'Masked';
+                return;
+            }
             const avgMonthly = projected.length
                 ? projected.reduce((sum, item) => sum + Number(item.value || 0), 0) / projected.length
                 : (data.summary?.average_monthly || 0);
@@ -1353,6 +1382,26 @@ body {
                 if (data.error) return console.warn('Forecast API:', data.error);
                 const history = data.history || [];
                 const forecast = data.forecast || [];
+                if (data.privacy_redacted) {
+                    dashboardForecastState = { data, forecast, params: getDashboardForecastParams() };
+                    renderDashboardForecastSummary(data, forecast);
+                    renderDashboardForecastTable(history, forecast, data.summary?.selected_category || 'combined');
+                    const labels = history.concat(forecast).map(item => new Date(item.date).toLocaleDateString(undefined, { year: 'numeric', month: 'short' }));
+                    const ctx = document.getElementById('forecastChart').getContext('2d');
+                    if (window._forecastChart) window._forecastChart.destroy();
+                    window._forecastChart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: labels,
+                            datasets: [
+                                { label: 'History', data: history.map(() => null), borderColor: 'rgba(54,162,235,1)', backgroundColor: 'rgba(54,162,235,0.1)', tension: 0.3 },
+                                { label: 'Forecast', data: Array(history.length).fill(null).concat(forecast.map(() => null)), borderColor: 'rgba(255,159,64,1)', backgroundColor: 'rgba(255,159,64,0.05)', tension: 0.3 }
+                            ]
+                        },
+                        options: { responsive: true, scales: { y: { beginAtZero: true, ticks: { callback: () => 'Masked' } } } }
+                    });
+                    return;
+                }
                 const avgMonthly = forecast.length ? forecast.reduce((s,x)=>s+(x.value||0),0)/forecast.length : (data.summary && data.summary.average_monthly ? data.summary.average_monthly : (history.length ? history.reduce((s,x)=>s+(x.value||0),0)/history.length : 0));
                 const now = new Date();
                 const monthsRemaining = data.summary?.predict_months || 1;
@@ -1724,12 +1773,12 @@ body {
                 const histValues = [];
                 history.forEach(h => {
                     labels.push(new Date(h.date).toLocaleDateString(undefined, { year: 'numeric', month: 'short' }));
-                    histValues.push(h.value || 0);
+                    histValues.push(data.privacy_redacted ? null : (h.value || 0));
                 });
                 const forecastValues = [];
                 forecast.forEach(f => {
                     labels.push(new Date(f.date).toLocaleDateString(undefined, { year: 'numeric', month: 'short' }));
-                    forecastValues.push(f.value || 0);
+                    forecastValues.push(data.privacy_redacted ? null : (f.value || 0));
                 });
 
                 const ctx = document.getElementById('forecastChart').getContext('2d');
@@ -1749,7 +1798,7 @@ body {
                             y: {
                                 beginAtZero: true,
                                 ticks: {
-                                    callback: value => 'PHP ' + Number(value).toLocaleString()
+                                    callback: value => data.privacy_redacted ? 'Masked' : 'PHP ' + Number(value).toLocaleString()
                                 }
                             }
                         }

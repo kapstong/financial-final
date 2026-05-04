@@ -280,6 +280,26 @@ try {
     $dbError = $e->getMessage();
     $annualBudgetTotal = 0;
 }
+
+if (function_exists('privacyModeEnabled') && privacyModeEnabled()) {
+    foreach ($chartData as &$item) {
+        $item['revenue'] = null;
+        $item['expenses'] = null;
+    }
+    unset($item);
+    foreach ($cashFlowData as &$item) {
+        $item['collections'] = null;
+        $item['disbursements'] = null;
+    }
+    unset($item);
+    foreach ($budgetActualData as &$item) {
+        $item['budgeted'] = null;
+        $item['actual'] = null;
+    }
+    unset($item);
+    $incomeAmounts = array_fill(0, count($incomeAmounts), null);
+    $annualBudgetTotal = null;
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -1334,6 +1354,28 @@ body {
                 if (data.error) return console.warn('Forecast API:', data.error);
                 const history = data.history || [];
                 const forecast = data.forecast || [];
+                if (data.privacy_redacted) {
+                    document.getElementById('projectedYearEnd').textContent = 'Masked';
+                    document.getElementById('expectedVariance').textContent = 'Masked';
+                    const labels = history.concat(forecast).map(item => new Date(item.date).toLocaleDateString(undefined, { year: 'numeric', month: 'short' }));
+                    const ctx = document.getElementById('forecastChart').getContext('2d');
+                    if (window._forecastChart) window._forecastChart.destroy();
+                    window._forecastChart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: labels,
+                            datasets: [
+                                { label: 'History', data: history.map(() => null), borderColor: 'rgba(54,162,235,1)', backgroundColor: 'rgba(54,162,235,0.1)', tension: 0.3 },
+                                { label: 'Forecast', data: Array(history.length).fill(null).concat(forecast.map(() => null)), borderColor: 'rgba(255,159,64,1)', backgroundColor: 'rgba(255,159,64,0.05)', tension: 0.3 }
+                            ]
+                        },
+                        options: { responsive: true, scales: { y: { beginAtZero: true, ticks: { callback: () => 'Masked' } } } }
+                    });
+                    if (window.forecasting && window.forecasting.renderForecast) {
+                        window.forecasting.renderForecast(data);
+                    }
+                    return;
+                }
                 const avgMonthly = forecast.length ? forecast.reduce((s,x)=>s+(x.value||0),0)/forecast.length : (data.summary && data.summary.average_monthly ? data.summary.average_monthly : (history.length ? history.reduce((s,x)=>s+(x.value||0),0)/history.length : 0));
                 const now = new Date();
                 const monthsRemaining = data.summary?.predict_months || 1;

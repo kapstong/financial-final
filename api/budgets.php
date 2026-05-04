@@ -6,6 +6,7 @@ require_once '../includes/logger.php';
 require_once '../includes/coa_validation.php';
 require_once '../includes/budget_alerts.php';
 require_once '../includes/python_runner.php';
+require_once '../includes/privacy.php';
 
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
@@ -838,15 +839,19 @@ function getForecastData($db) {
 
     $modelResult = runRandomForestForecast($history, $predictMonths);
     if (isset($modelResult['error'])) {
-        echo json_encode([
+        $errorResponse = [
             'error' => $modelResult['error'],
             'details' => $modelResult['details'] ?? null,
             'history' => $history
-        ]);
+        ];
+        if (privacyModeEnabled()) {
+            $errorResponse = redactForecastResponseForPrivacy($errorResponse);
+        }
+        echo json_encode($errorResponse);
         return;
     }
 
-    echo json_encode([
+    $response = [
         'history' => $history,
         'forecast' => $modelResult['forecast'] ?? [],
         'summary' => [
@@ -876,7 +881,68 @@ function getForecastData($db) {
             ]
         ],
         'method' => $modelResult['method'] ?? 'random_forest_regressor'
-    ]);
+    ];
+
+    if (privacyModeEnabled()) {
+        $response = redactForecastResponseForPrivacy($response);
+    }
+
+    echo json_encode($response);
+}
+
+function redactForecastResponseForPrivacy(array $response) {
+    foreach (['history', 'forecast'] as $seriesKey) {
+        if (!isset($response[$seriesKey]) || !is_array($response[$seriesKey])) {
+            continue;
+        }
+
+        foreach ($response[$seriesKey] as &$item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            if (array_key_exists('value', $item)) {
+                $item['value'] = null;
+            }
+            if (isset($item['source_breakdown']) && is_array($item['source_breakdown'])) {
+                foreach ($item['source_breakdown'] as $source => $_value) {
+                    $item['source_breakdown'][$source] = null;
+                }
+            }
+        }
+        unset($item);
+    }
+
+    if (isset($response['summary']) && is_array($response['summary'])) {
+        foreach (['total', 'average_monthly'] as $key) {
+            if (array_key_exists($key, $response['summary'])) {
+                $response['summary'][$key] = null;
+            }
+        }
+        if (isset($response['summary']['source_totals']) && is_array($response['summary']['source_totals'])) {
+            foreach ($response['summary']['source_totals'] as $source => $_value) {
+                $response['summary']['source_totals'][$source] = null;
+            }
+        }
+    }
+
+    if (isset($response['drivers']) && is_array($response['drivers'])) {
+        foreach ($response['drivers'] as &$driver) {
+            if (!is_array($driver)) {
+                continue;
+            }
+            foreach (['total', 'average_monthly', 'recent_average', 'share_percent'] as $key) {
+                if (array_key_exists($key, $driver)) {
+                    $driver[$key] = null;
+                }
+            }
+        }
+        unset($driver);
+    }
+
+    $response['privacy_redacted'] = true;
+    $response['privacy_message'] = 'Privacy mode is ON. Forecast amounts are redacted until OTP verification is completed.';
+
+    return $response;
 }
 
 function getTrackingData($db) {
