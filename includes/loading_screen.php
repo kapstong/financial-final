@@ -30,7 +30,7 @@ define('ATIERA_LOADING_SCREEN_INCLUDED', true);
 .atiera-transition-loader.active {
     opacity: 1;
     visibility: visible;
-    pointer-events: auto;
+    pointer-events: none;
 }
 
 html.atiera-loading-active .sidebar,
@@ -308,9 +308,6 @@ body.atiera-loading-active .sidebar-toggle {
     }
 
     function hideLoader() {
-        if (!visible) {
-            return;
-        }
         visible = false;
         clearTimers();
         setLoadingUiState(false);
@@ -425,8 +422,15 @@ body.atiera-loading-active .sidebar-toggle {
         hide: hideLoader
     };
 
-    initNavigationHooks();
+    hideLoader();
+    window.setTimeout(hideLoader, 250);
+    window.setTimeout(hideLoader, 1200);
 
+    if (loader.dataset.autoHooks !== "false") {
+        initNavigationHooks();
+    }
+
+    window.addEventListener("DOMContentLoaded", hideLoader);
     window.addEventListener("load", function () {
         window.setTimeout(hideLoader, 120);
     });
@@ -434,5 +438,7 @@ body.atiera-loading-active .sidebar-toggle {
     window.addEventListener("pageshow", function () {
         hideLoader();
     });
+
+    window.addEventListener("focus", hideLoader);
 })();
 </script>

@@ -549,7 +549,7 @@ login_end:
         </div>
       <?php endif; ?>
 
-      <form method="POST" class="space-y-5 reveal reveal-3" novalidate <?php echo $isLocked ? 'onsubmit="return false;"' : ''; ?> aria-describedby="formStatus">
+      <form method="POST" class="space-y-5 reveal reveal-3 no-loading" data-no-loading="true" novalidate <?php echo $isLocked ? 'onsubmit="return false;"' : ''; ?> aria-describedby="formStatus">
         <?php csrf_input(); ?>
         <input type="hidden" name="device_label" id="device_label">
         <input type="hidden" name="device_model" id="device_model">
