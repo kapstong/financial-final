@@ -43,7 +43,6 @@ $canViewSettings = $isAdminRole || $permManager->hasPermission('settings.view') 
 $csrfToken = csrf_token();
 $privacyModeEnabled = privacyModeEnabled();
 ?>
-<?php include_once __DIR__ . '/loading_screen.php'; ?>
 <style>
     .navbar-date-time {
         font-size: 0.95rem;
@@ -130,7 +129,6 @@ $privacyModeEnabled = privacyModeEnabled();
     </div>
 </div>
 <meta name="csrf-token" content="<?php echo htmlspecialchars($csrfToken); ?>">
-<script src="<?php echo htmlspecialchars($assetPrefix . 'includes/inactivity_timeout.js?v=4'); ?>"></script>
 <script>
     (function() {
         const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
@@ -512,15 +510,6 @@ $privacyModeEnabled = privacyModeEnabled();
                     return undefined;
                 };
             }
-            observer = new MutationObserver(function(mutations) {
-                if (applyingPrivacy) return;
-                mutations.forEach(function(mutation) {
-                    mutation.addedNodes.forEach(scanMoney);
-                    if (mutation.type === 'characterData') scanMoney(mutation.target);
-                });
-            });
-            observer.observe(document.body, { childList: true, characterData: true, subtree: true });
-
             document.getElementById('privacyEyeButton')?.addEventListener('click', function() {
                 handleToggle().catch(error => alert(error.message));
             });

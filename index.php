@@ -489,8 +489,6 @@ login_end:
 </head>
 
 <body class="grid md:grid-cols-2 gap-0 place-items-center p-6 md:p-10 min-h-screen">
-  <?php include_once 'includes/loading_screen.php'; ?>
-
   <div class="bg-watermark" aria-hidden="true">
     <img src="logo.png" alt="ATIERA watermark" id="wm">
   </div>
