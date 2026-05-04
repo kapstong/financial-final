@@ -24,7 +24,7 @@ function privacySetMode($enabled)
 
 function privacyMaskText($value)
 {
-    return preg_replace('/\d/', '*', (string) $value);
+    return preg_replace('/[\d,.]/', '*', (string) $value);
 }
 
 function privacyMoneyHtml($formattedValue)
@@ -33,8 +33,7 @@ function privacyMoneyHtml($formattedValue)
     $visible = privacyIsVisible();
     $displayValue = $visible ? $formattedValue : privacyMaskText($formattedValue);
 
-    return '<span class="privacy-money" data-privacy-money="1" data-privacy-value="' .
-        htmlspecialchars($formattedValue, ENT_QUOTES, 'UTF-8') . '">' .
+    return '<span class="privacy-money" data-privacy-money="1">' .
         htmlspecialchars($displayValue, ENT_QUOTES, 'UTF-8') .
         '</span>';
 }

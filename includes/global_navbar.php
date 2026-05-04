@@ -155,7 +155,7 @@ $privacyModeEnabled = privacyModeEnabled();
         let observer = null;
 
         function maskMoney(value) {
-            return String(value).replace(/\d/g, '*');
+            return String(value).replace(/[\d,.]/g, '*');
         }
 
         function updateButton() {
@@ -167,11 +167,6 @@ $privacyModeEnabled = privacyModeEnabled();
             icon.classList.toggle('fa-eye', !privacyMode);
             button.title = privacyMode ? 'Privacy Mode On - verify to show amounts' : 'Privacy Mode Off - hide amounts';
             button.setAttribute('aria-label', button.title);
-        }
-
-        function applyMoneyElement(el) {
-            if (!el || !el.dataset.privacyValue) return;
-            el.textContent = privacyMode ? maskMoney(el.dataset.privacyValue) : el.dataset.privacyValue;
         }
 
         function shouldSkipNode(node) {
@@ -196,7 +191,6 @@ $privacyModeEnabled = privacyModeEnabled();
                 const span = document.createElement('span');
                 span.className = 'privacy-money';
                 span.dataset.privacyMoney = '1';
-                span.dataset.privacyValue = value;
                 span.textContent = privacyMode ? maskMoney(value) : value;
                 fragment.appendChild(span);
                 lastIndex = offset + match.length;
@@ -216,7 +210,12 @@ $privacyModeEnabled = privacyModeEnabled();
                 if (root.nodeType === Node.TEXT_NODE) {
                     wrapTextNode(root);
                 } else if (root.nodeType === Node.ELEMENT_NODE || root.nodeType === Node.DOCUMENT_NODE) {
-                    root.querySelectorAll?.('.privacy-money[data-privacy-value]').forEach(applyMoneyElement);
+                    if (privacyMode) {
+                        root.querySelectorAll?.('.privacy-money').forEach(function(el) {
+                            el.removeAttribute('data-privacy-value');
+                            el.textContent = maskMoney(el.textContent);
+                        });
+                    }
                     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
                         acceptNode: function(node) {
                             return shouldSkipNode(node) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
@@ -235,6 +234,10 @@ $privacyModeEnabled = privacyModeEnabled();
             privacyMode = !!enabled;
             updateButton();
             scanMoney(document.body);
+        }
+
+        function reloadForPrivacyState() {
+            window.location.reload();
         }
 
         async function postPrivacy(action, payload) {
@@ -306,8 +309,10 @@ $privacyModeEnabled = privacyModeEnabled();
             showOtpError('');
             try {
                 await postPrivacy('verify_otp', { code });
-                setPrivacyMode(false);
+                privacyMode = false;
+                updateButton();
                 bootstrap.Modal.getOrCreateInstance(document.getElementById('privacyOtpModal')).hide();
+                reloadForPrivacyState();
             } catch (error) {
                 showOtpError(error.message);
             } finally {
@@ -319,6 +324,7 @@ $privacyModeEnabled = privacyModeEnabled();
             if (!privacyMode) {
                 await postPrivacy('enable');
                 setPrivacyMode(true);
+                reloadForPrivacyState();
                 return;
             }
 
@@ -338,7 +344,9 @@ $privacyModeEnabled = privacyModeEnabled();
             const code = prompt('Enter the 6-digit verification code sent to your email:');
             if (code) {
                 await postPrivacy('verify_otp', { code: code.replace(/\D/g, '') });
-                setPrivacyMode(false);
+                privacyMode = false;
+                updateButton();
+                reloadForPrivacyState();
             }
         }
 
