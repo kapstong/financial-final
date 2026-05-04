@@ -33,15 +33,6 @@ define('ATIERA_LOADING_SCREEN_INCLUDED', true);
     pointer-events: none;
 }
 
-html.atiera-loading-active .sidebar,
-body.atiera-loading-active .sidebar,
-html.atiera-loading-active .sidebar-toggle,
-body.atiera-loading-active .sidebar-toggle {
-    opacity: 0 !important;
-    visibility: hidden !important;
-    pointer-events: none !important;
-}
-
 .atiera-transition-loader * {
     box-sizing: border-box;
 }
@@ -198,7 +189,7 @@ body.atiera-loading-active .sidebar-toggle {
 }
 </style>
 
-<div class="atiera-transition-loader" id="atieraTransitionLoader" role="status" aria-live="polite" aria-hidden="true">
+<div class="atiera-transition-loader" id="atieraTransitionLoader" role="status" aria-live="polite" aria-hidden="true" data-show-on-load="true" data-auto-hooks="false">
     <section class="atiera-loader-shell">
         <p class="atiera-loader-brand">ATIERA</p>
         <p class="atiera-loader-title">Financial Management Hub</p>
@@ -378,57 +369,18 @@ body.atiera-loading-active .sidebar-toggle {
         return !isInPageAnchor;
     }
 
-    function initNavigationHooks() {
-        document.addEventListener("click", function (event) {
-            const link = event.target.closest("a[href]");
-            if (!isNavigableLink(link, event)) {
-                return;
-            }
-            event.preventDefault();
-            if (navigationLocked) {
-                return;
-            }
-            navigationLocked = true;
-            const status = (link.dataset.loadingText || "").trim();
-            showLoader(status || "Opening next page...");
-            window.setTimeout(function () {
-                window.location.assign(link.href);
-            }, LINK_NAVIGATION_DELAY_MS);
-        }, true);
-
-        document.addEventListener("submit", function (event) {
-            const form = event.target;
-            if (!(form instanceof HTMLFormElement)) {
-                return;
-            }
-            if (form.classList.contains("no-loading") || form.dataset.noLoading === "true") {
-                return;
-            }
-            const target = (form.getAttribute("target") || "").toLowerCase();
-            if (target && target !== "_self") {
-                return;
-            }
-            const action = (form.getAttribute("action") || window.location.href).trim();
-            if (isLogoutUrl(action)) {
-                return;
-            }
-            const status = (form.dataset.loadingText || "").trim();
-            showLoader(status || "Submitting request...");
-        }, true);
-    }
-
     window.AtieraLoader = {
         show: showLoader,
         hide: hideLoader
     };
 
-    hideLoader();
+    if (loader.dataset.showOnLoad === "true") {
+        showLoader("Preparing workspace...");
+    } else {
+        hideLoader();
+    }
     window.setTimeout(hideLoader, 250);
     window.setTimeout(hideLoader, 1200);
-
-    if (loader.dataset.autoHooks !== "false") {
-        initNavigationHooks();
-    }
 
     window.addEventListener("DOMContentLoaded", hideLoader);
     window.addEventListener("load", function () {

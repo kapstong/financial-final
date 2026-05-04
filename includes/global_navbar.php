@@ -43,6 +43,7 @@ $canViewSettings = $isAdminRole || $permManager->hasPermission('settings.view') 
 $csrfToken = csrf_token();
 $privacyModeEnabled = privacyModeEnabled();
 ?>
+<?php include_once __DIR__ . '/loading_screen.php'; ?>
 <style>
     .navbar-date-time {
         font-size: 0.95rem;
