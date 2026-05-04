@@ -920,9 +920,18 @@ body {
             <div class="col-md-12">
                 <div class="card">
                     <div class="card-header">
-                        <h5 style="margin: 0; color: #1e2936; font-weight: 700;">Dashboard Analytics</h5>
+                        <ul class="nav nav-tabs card-header-tabs" id="dashboardTabs" role="tablist">
+                            <li class="nav-item">
+                                <a class="nav-link active" id="overview-tab" data-bs-toggle="tab" href="#overview" role="tab" aria-controls="overview" aria-selected="true"><i class="fas fa-tachometer-alt me-1"></i>Overview</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" id="forecast-tab" data-bs-toggle="tab" href="#forecast" role="tab" aria-controls="forecast" aria-selected="false"><i class="fas fa-chart-area me-1"></i>Forecast</a>
+                            </li>
+                        </ul>
                     </div>
                     <div class="card-body" style="padding-bottom: 100px;">
+                        <div class="tab-content" id="dashboardTabsContent">
+                            <div class="tab-pane fade show active" id="overview" role="tabpanel" aria-labelledby="overview-tab">
                         <!-- Key Metrics Row -->
                         <div class="row mb-4">
                             <div class="col-lg-3 col-md-6 mb-3">
@@ -1053,7 +1062,7 @@ body {
                                                 </div>
                                             </div>
 
-                            <!-- Forecasting (moved from Budget Management) -->
+                            <!-- Recent Activity -->
                             <div class="row mt-4" data-dashboard-forecast-section="1">
                             <div class="col-12">
                                 <div class="card h-100">
@@ -1102,6 +1111,93 @@ body {
                                 </div>
                             </div>
                         </div>
+                            </div>
+
+                            <div class="tab-pane fade" id="forecast" role="tabpanel" aria-labelledby="forecast-tab">
+                                <div class="row mt-4">
+                                    <div class="col-lg-6">
+                                        <div class="card h-100">
+                                            <div class="card-header d-flex align-items-center">
+                                                <i class="fas fa-chart-area text-primary me-3 fa-lg"></i>
+                                                <div>
+                                                    <h6 class="mb-0">Forecasting</h6>
+                                                    <small class="text-muted">Random Forest Regressor predictive analytics</small>
+                                                </div>
+                                            </div>
+                                            <div class="card-body">
+                                                <div class="row g-3 align-items-end mb-3">
+                                                    <div class="col-md-5">
+                                                        <label for="forecastSourceFilter" class="form-label small text-muted mb-1">Forecast source</label>
+                                                        <select id="forecastSourceFilter" class="form-select">
+                                                            <option value="combined">Combined</option>
+                                                            <option value="disbursements">Disbursements</option>
+                                                            <option value="payments_made">Payments Made</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-4">
+                                                        <label for="forecastTargetDate" class="form-label small text-muted mb-1">Forecast target date</label>
+                                                        <input type="date" id="forecastTargetDate" class="form-control" value="<?php echo date('Y-m-d', strtotime('+1 day')); ?>">
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <button id="refreshForecastBtn" class="btn btn-outline-secondary w-100"><i class="fas fa-rotate me-2"></i>Refresh</button>
+                                                    </div>
+                                                </div>
+                                                <input type="hidden" id="forecastMonthsFilter" value="48">
+                                                <div class="row mb-3">
+                                                    <div class="col-6">
+                                                        <div class="card forecast-card">
+                                                            <div class="card-body">
+                                                                <h6>Forecast Through Target</h6>
+                                                                <h3 id="projectedYearEnd">Loading...</h3>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-6">
+                                                        <div class="card forecast-card">
+                                                            <div class="card-body">
+                                                                <h6>Expected Variance</h6>
+                                                                <h3 id="expectedVariance">Loading...</h3>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div class="chart-container mb-3">
+                                                    <canvas id="forecastChart"></canvas>
+                                                </div>
+                                                <div class="d-flex flex-wrap gap-3 small text-muted">
+                                                    <span id="forecastCoverageSummary">Loading forecast coverage...</span>
+                                                    <span id="forecastLineageSummary">Loading model...</span>
+                                                    <span id="forecastSourceSummary">Loading source...</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-lg-6">
+                                        <div class="card h-100">
+                                            <div class="card-header d-flex align-items-center justify-content-between">
+                                                <div class="d-flex align-items-center">
+                                                    <i class="fas fa-list text-secondary me-3 fa-lg"></i>
+                                                    <div>
+                                                        <h6 class="mb-0">Forecast Drivers</h6>
+                                                        <small class="text-muted">Key items influencing the forecast</small>
+                                                    </div>
+                                                </div>
+                                                <button id="forecastExportBtn" class="btn btn-sm btn-outline-primary"><i class="fas fa-download me-1"></i>Export</button>
+                                            </div>
+                                            <div class="card-body">
+                                                <div class="table-responsive">
+                                                    <table class="table table-striped">
+                                                        <tbody id="forecastDriversBody">
+                                                            <tr><td colspan="5" class="text-center text-muted">Loading forecast drivers...</td></tr>
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1127,11 +1223,20 @@ body {
             return 'PHP ' + Math.round(Number(value || 0)).toLocaleString();
         }
 
+        function getForecastTargetDate() {
+            const input = document.getElementById('forecastTargetDate');
+            if (input && input.value) return input.value;
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            return tomorrow.toISOString().slice(0, 10);
+        }
+
         function getDashboardForecastParams() {
             const params = new URLSearchParams();
             params.append('action', 'forecast');
             params.append('months', document.getElementById('forecastMonthsFilter')?.value || '48');
             params.append('category', document.getElementById('forecastSourceFilter')?.value || 'combined');
+            params.append('forecast_date', getForecastTargetDate());
             return params;
         }
 
@@ -1174,12 +1279,15 @@ body {
                 : '<tr><td colspan="5" class="text-center text-muted">No forecast driver data available.</td></tr>';
         }
 
-        function renderDashboardForecastSummary(data, tfres) {
+        function renderDashboardForecastSummary(data, forecast) {
             const history = data.history || [];
-            const avgMonthly = data.summary?.average_monthly || 0;
+            const projected = forecast || data.forecast || [];
+            const avgMonthly = projected.length
+                ? projected.reduce((sum, item) => sum + Number(item.value || 0), 0) / projected.length
+                : (data.summary?.average_monthly || 0);
             const selectedCategory = data.summary?.selected_category || 'combined';
             const now = new Date();
-            const monthsRemaining = 12 - (now.getMonth() + 1);
+            const monthsRemaining = data.summary?.predict_months || 1;
             const ytd = history.reduce((sum, item) => {
                 const month = new Date(item.date);
                 if (month.getFullYear() === now.getFullYear() && month.getMonth() <= now.getMonth()) {
@@ -1193,10 +1301,9 @@ body {
             const dominantDriver = (data.drivers || []).slice().sort((left, right) => (right.total || 0) - (left.total || 0))[0];
 
             document.getElementById('projectedYearEnd').textContent = formatForecastCurrency(projectedYearEnd);
-            document.getElementById('forecastRunRate').textContent = formatForecastCurrency(avgMonthly);
             document.getElementById('expectedVariance').textContent = `${variance >= 0 ? 'PHP ' : '-PHP '}${Math.abs(variance).toLocaleString()}`;
             document.getElementById('forecastCoverageSummary').textContent = `${history.length} historical months | ${selectedCategory.replace('_', ' ')}`;
-            document.getElementById('forecastLineageSummary').textContent = `${(data.method || 'history_only').replace('_', ' ')} with ${(tfres.method || 'naive').replace('_', ' ')}`;
+            document.getElementById('forecastLineageSummary').textContent = `${(data.method || data.model?.method || 'random_forest_regressor').replaceAll('_', ' ')}`;
             document.getElementById('forecastSourceSummary').textContent = dominantDriver
                 ? `${dominantDriver.label} (${Math.round(dominantDriver.share_percent || 0)}% share)`
                 : 'No dominant source';
@@ -1207,7 +1314,7 @@ body {
                 return;
             }
 
-            const { data, tfres, params } = dashboardForecastState;
+            const { data, forecast, params } = dashboardForecastState;
             const rows = [];
             (data.history || []).forEach(item => {
                 rows.push([
@@ -1218,7 +1325,7 @@ body {
                     item.source_breakdown?.payments_made || 0
                 ]);
             });
-            (tfres.forecast || []).forEach(item => {
+            (forecast || []).forEach(item => {
                 rows.push([item.date, 'forecast', item.value, '', '']);
             });
 
@@ -1240,14 +1347,15 @@ body {
 
         async function loadDashboardForecast() {
             try {
-                const apiPath = '../api/budgets.php?action=forecast&months=48';
+                const apiPath = '../api/budgets.php?' + getDashboardForecastParams().toString();
                 const resp = await fetch(apiPath);
                 const data = await resp.json();
                 if (data.error) return console.warn('Forecast API:', data.error);
                 const history = data.history || [];
-                const avgMonthly = data.summary && data.summary.average_monthly ? data.summary.average_monthly : (history.length ? history.reduce((s,x)=>s+(x.value||0),0)/history.length : 0);
+                const forecast = data.forecast || [];
+                const avgMonthly = forecast.length ? forecast.reduce((s,x)=>s+(x.value||0),0)/forecast.length : (data.summary && data.summary.average_monthly ? data.summary.average_monthly : (history.length ? history.reduce((s,x)=>s+(x.value||0),0)/history.length : 0));
                 const now = new Date();
-                const monthsRemaining = 12 - (now.getMonth() + 1);
+                const monthsRemaining = data.summary?.predict_months || 1;
                 const ytd = history.reduce((s, h) => {
                     const d = new Date(h.date);
                     if (d.getFullYear() === now.getFullYear() && (d.getMonth() + 1) <= (now.getMonth() + 1)) return s + (h.value || 0);
@@ -1258,16 +1366,11 @@ body {
                 const variance = Math.round(projectedYearEnd - (typeof annualBudgetTotal !== 'undefined' ? annualBudgetTotal : 0));
                 document.getElementById('expectedVariance').textContent = (variance >=0 ? '₱' : '-₱') + Math.abs(variance).toLocaleString();
 
-                let tfres = { forecast: [] };
-                if (window.forecasting && window.forecasting.tfForecast) {
-                    try { tfres = await window.forecasting.tfForecast(history, 12); } catch (e) { console.warn('TF forecast failed', e); }
-                }
-
                 const labels = [];
                 const histValues = [];
                 history.forEach(h => { labels.push(new Date(h.date).toLocaleDateString(undefined, { year: 'numeric', month: 'short' })); histValues.push(h.value || 0); });
                 const forecastValues = [];
-                (tfres.forecast || []).forEach(f => { labels.push(new Date(f.date).toLocaleDateString(undefined, { year: 'numeric', month: 'short' })); forecastValues.push(f.value || 0); });
+                forecast.forEach(f => { labels.push(new Date(f.date).toLocaleDateString(undefined, { year: 'numeric', month: 'short' })); forecastValues.push(f.value || 0); });
 
                 const ctx = document.getElementById('forecastChart').getContext('2d');
                 if (window._forecastChart) window._forecastChart.destroy();
@@ -1284,7 +1387,7 @@ body {
                 });
 
                 if (window.forecasting && window.forecasting.renderForecast) {
-                    window.forecasting.renderForecast({ method: tfres.method || 'server', history: history, forecast: tfres.forecast || [], details: tfres.details, training: tfres.training });
+                    window.forecasting.renderForecast(data);
                 }
 
             } catch (e) { console.error('Failed to load forecast', e); }
@@ -1611,14 +1714,11 @@ body {
                 }
 
                 const history = data.history || [];
-                let tfres = { forecast: [] };
-                if (window.forecasting && window.forecasting.tfForecast) {
-                    try { tfres = await window.forecasting.tfForecast(history, 12); } catch (e) { console.warn('TF forecast failed', e); }
-                }
+                const forecast = data.forecast || [];
 
-                dashboardForecastState = { data, tfres, params };
-                renderDashboardForecastSummary(data, tfres);
-                renderDashboardForecastTable(history, tfres.forecast || [], data.summary?.selected_category || 'combined');
+                dashboardForecastState = { data, forecast, params };
+                renderDashboardForecastSummary(data, forecast);
+                renderDashboardForecastTable(history, forecast, data.summary?.selected_category || 'combined');
 
                 const labels = [];
                 const histValues = [];
@@ -1627,7 +1727,7 @@ body {
                     histValues.push(h.value || 0);
                 });
                 const forecastValues = [];
-                (tfres.forecast || []).forEach(f => {
+                forecast.forEach(f => {
                     labels.push(new Date(f.date).toLocaleDateString(undefined, { year: 'numeric', month: 'short' }));
                     forecastValues.push(f.value || 0);
                 });
@@ -1668,7 +1768,9 @@ body {
             mergeDashboardSections();
             document.getElementById('forecastSourceFilter')?.addEventListener('change', loadDashboardForecast);
             document.getElementById('forecastMonthsFilter')?.addEventListener('change', loadDashboardForecast);
+            document.getElementById('forecastTargetDate')?.addEventListener('change', loadDashboardForecast);
             document.getElementById('forecastExportBtn')?.addEventListener('click', exportDashboardForecast);
+            loadDashboardForecast();
         });
     </script><!-- Inactivity Timeout - Blur screen + Auto logout -->
     <script src="../includes/inactivity_timeout.js?v=3"></script>

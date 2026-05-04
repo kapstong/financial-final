@@ -851,6 +851,9 @@ body {
                             <li class="nav-item">
                                 <a class="nav-link" id="analytics-tab" data-bs-toggle="tab" href="#analytics" role="tab" aria-controls="analytics" aria-selected="false"><i class="fas fa-chart-line me-1"></i>Analytics</a>
                             </li>
+                            <li class="nav-item">
+                                <a class="nav-link" id="forecast-tab" data-bs-toggle="tab" href="#forecast" role="tab" aria-controls="forecast" aria-selected="false"><i class="fas fa-chart-area me-1"></i>Forecast</a>
+                            </li>
 
                             <li class="nav-item">
                                 <a class="nav-link" id="reports-tab" data-bs-toggle="tab" href="#reports" role="tab" aria-controls="reports" aria-selected="false"><i class="fas fa-chart-bar me-1"></i>Reports</a>
@@ -1080,7 +1083,8 @@ body {
                                 </div>
                             </div>
 
-                            <!-- Forecasting (moved from Budget Management) -->
+                            <!-- Forecast Tab -->
+                            <div class="tab-pane fade" id="forecast" role="tabpanel" aria-labelledby="forecast-tab" style="padding-bottom: 100px;">
                             <div class="row mt-4">
                                 <div class="col-lg-6">
                                     <div class="card h-100">
@@ -1092,11 +1096,20 @@ body {
                                             </div>
                                         </div>
                                         <div class="card-body">
+                                            <div class="row g-3 align-items-end mb-3">
+                                                <div class="col-md-7">
+                                                    <label for="forecastTargetDate" class="form-label small text-muted mb-1">Forecast target date</label>
+                                                    <input type="date" id="forecastTargetDate" class="form-control" value="<?php echo date('Y-m-d', strtotime('+1 day')); ?>">
+                                                </div>
+                                                <div class="col-md-5">
+                                                    <button id="refreshForecastBtn" class="btn btn-outline-secondary w-100"><i class="fas fa-rotate me-2"></i>Refresh Forecast</button>
+                                                </div>
+                                            </div>
                                             <div class="row mb-3">
                                                 <div class="col-6">
                                                     <div class="card forecast-card">
                                                         <div class="card-body">
-                                                            <h6>Projected Year-End Spend</h6>
+                                                            <h6>Forecast Through Target</h6>
                                                             <h3 id="projectedYearEnd">Loading...</h3>
                                                         </div>
                                                     </div>
@@ -1112,9 +1125,6 @@ body {
                                             </div>
                                             <div class="chart-container mb-3">
                                                 <canvas id="forecastChart"></canvas>
-                                            </div>
-                                            <div>
-                                                <button id="refreshForecastBtn" class="btn btn-outline-secondary"><i class="fas fa-rotate me-2"></i>Refresh Forecast</button>
                                             </div>
                                         </div>
                                     </div>
@@ -1139,6 +1149,7 @@ body {
                                         </div>
                                     </div>
                                 </div>
+                            </div>
                             </div>
 
                                             <!-- Reports Tab -->
@@ -1198,16 +1209,25 @@ body {
     <script src="../includes/alert-modal.js"></script>
     <script src="../includes/forecasting.js?v=2"></script>
     <script>
+        function getForecastTargetDate() {
+            const input = document.getElementById('forecastTargetDate');
+            if (input && input.value) return input.value;
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            return tomorrow.toISOString().slice(0, 10);
+        }
+
         async function loadDashboardForecast() {
             try {
-                const apiPath = '../api/budgets.php?action=forecast&months=48';
+                const apiPath = '../api/budgets.php?action=forecast&months=48&forecast_date=' + encodeURIComponent(getForecastTargetDate());
                 const resp = await fetch(apiPath);
                 const data = await resp.json();
                 if (data.error) return console.warn('Forecast API:', data.error);
                 const history = data.history || [];
-                const avgMonthly = data.summary && data.summary.average_monthly ? data.summary.average_monthly : (history.length ? history.reduce((s,x)=>s+(x.value||0),0)/history.length : 0);
+                const forecast = data.forecast || [];
+                const avgMonthly = forecast.length ? forecast.reduce((s,x)=>s+(x.value||0),0)/forecast.length : (data.summary && data.summary.average_monthly ? data.summary.average_monthly : (history.length ? history.reduce((s,x)=>s+(x.value||0),0)/history.length : 0));
                 const now = new Date();
-                const monthsRemaining = 12 - (now.getMonth() + 1);
+                const monthsRemaining = data.summary?.predict_months || 1;
                 const ytd = history.reduce((s, h) => {
                     const d = new Date(h.date);
                     if (d.getFullYear() === now.getFullYear() && (d.getMonth() + 1) <= (now.getMonth() + 1)) return s + (h.value || 0);
@@ -1218,16 +1238,11 @@ body {
                 const variance = Math.round(projectedYearEnd - (typeof annualBudgetTotal !== 'undefined' ? annualBudgetTotal : 0));
                 document.getElementById('expectedVariance').textContent = (variance >=0 ? '₱' : '-₱') + Math.abs(variance).toLocaleString();
 
-                let tfres = { forecast: [] };
-                if (window.forecasting && window.forecasting.tfForecast) {
-                    try { tfres = await window.forecasting.tfForecast(history, 12); } catch (e) { console.warn('TF forecast failed', e); }
-                }
-
                 const labels = [];
                 const histValues = [];
                 history.forEach(h => { labels.push(new Date(h.date).toLocaleDateString(undefined, { year: 'numeric', month: 'short' })); histValues.push(h.value || 0); });
                 const forecastValues = [];
-                (tfres.forecast || []).forEach(f => { labels.push(new Date(f.date).toLocaleDateString(undefined, { year: 'numeric', month: 'short' })); forecastValues.push(f.value || 0); });
+                forecast.forEach(f => { labels.push(new Date(f.date).toLocaleDateString(undefined, { year: 'numeric', month: 'short' })); forecastValues.push(f.value || 0); });
 
                 const ctx = document.getElementById('forecastChart').getContext('2d');
                 if (window._forecastChart) window._forecastChart.destroy();
@@ -1244,7 +1259,7 @@ body {
                 });
 
                 if (window.forecasting && window.forecasting.renderForecast) {
-                    window.forecasting.renderForecast({ method: tfres.method || 'server', history: history, forecast: tfres.forecast || [], details: tfres.details, training: tfres.training });
+                    window.forecasting.renderForecast(data);
                 }
 
             } catch (e) { console.error('Failed to load forecast', e); }
@@ -1254,6 +1269,7 @@ body {
             const canViewBudgets = <?php echo json_encode($canViewBudgets ?? false); ?>;
             const btn = document.getElementById('refreshForecastBtn');
             if (btn && canViewBudgets) btn.addEventListener('click', loadDashboardForecast);
+            document.getElementById('forecastTargetDate')?.addEventListener('change', loadDashboardForecast);
             if (canViewBudgets) {
                 loadDashboardForecast();
             }

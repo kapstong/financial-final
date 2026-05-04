@@ -1,121 +1,150 @@
 #!/usr/bin/env python3
-import sys
+import csv
 import json
 import os
+import sys
 from datetime import datetime
 
 try:
-    import pandas as pd
     import numpy as np
-    from statsmodels.tsa.holtwinters import ExponentialSmoothing
-except Exception as e:
-    pd = None
+    from sklearn.ensemble import RandomForestRegressor
+except Exception:
     np = None
-    ExponentialSmoothing = None
+    RandomForestRegressor = None
 
 
-def simple_forecast(dates, values, periods):
-    # fallback: average monthly growth
-    if len(values) < 2:
-        last = float(values[-1]) if values else 0.0
-        return {'method': 'naive', 'forecast': [{'date': (datetime.strptime(dates[-1], '%Y-%m-%d').replace(day=1).strftime('%Y-%m-01')),'value': last} for _ in range(periods)], 'details': 'Not enough history; returning last value repeated.'}
-    # compute monthly growth rates
+def parse_month(date_value):
+    return datetime.strptime(date_value[:10], "%Y-%m-%d")
+
+
+def add_months(date_value, months):
+    month_index = date_value.month - 1 + months
+    year = date_value.year + month_index // 12
+    month = month_index % 12 + 1
+    return datetime(year, month, 1)
+
+
+def simple_forecast(dates, values, periods, details):
+    last_date = parse_month(dates[-1]) if dates else datetime.today().replace(day=1)
     vals = [float(v) for v in values]
-    growths = []
-    for i in range(1, len(vals)):
-        prev = vals[i-1]
-        if prev == 0:
-            growths.append(0.0)
-        else:
-            growths.append((vals[i] - prev) / prev)
-    avg_growth = sum(growths) / len(growths) if growths else 0.0
-    last_date = datetime.strptime(dates[-1], '%Y-%m-%d')
-    last_val = vals[-1]
     forecast = []
-    for i in range(1, periods+1):
-        # advance month
-        m = (last_date.month - 1 + i) % 12 + 1
-        y = last_date.year + ((last_date.month - 1 + i) // 12)
-        dstr = f"{y:04d}-{m:02d}-01"
-        last_val = last_val * (1 + avg_growth)
-        forecast.append({'date': dstr, 'value': round(float(last_val), 2)})
-    return {'method': 'avg_growth', 'forecast': forecast, 'details': f'Average monthly growth rate: {avg_growth:.4f}'}
+
+    if len(vals) < 2:
+        last_value = vals[-1] if vals else 0.0
+        for idx in range(1, periods + 1):
+            target_date = add_months(last_date, idx)
+            forecast.append({"date": target_date.strftime("%Y-%m-01"), "value": round(last_value, 2)})
+        return {"method": "naive", "forecast": forecast, "details": details}
+
+    growth_rates = []
+    for idx in range(1, len(vals)):
+        previous = vals[idx - 1]
+        growth_rates.append(0.0 if previous == 0 else (vals[idx] - previous) / previous)
+
+    average_growth = sum(growth_rates) / len(growth_rates) if growth_rates else 0.0
+    value = vals[-1]
+    for idx in range(1, periods + 1):
+        target_date = add_months(last_date, idx)
+        value = value * (1 + average_growth)
+        forecast.append({"date": target_date.strftime("%Y-%m-01"), "value": round(float(max(value, 0)), 2)})
+
+    return {
+        "method": "avg_growth_fallback",
+        "forecast": forecast,
+        "details": f"{details}; average monthly growth rate: {average_growth:.4f}",
+    }
+
+
+def build_lag_features(values, dates, lag_count=6):
+    rows = []
+    targets = []
+    for idx in range(lag_count, len(values)):
+        date_value = parse_month(dates[idx])
+        lag_values = values[idx - lag_count:idx]
+        rows.append(lag_values + [date_value.month, date_value.year, idx])
+        targets.append(values[idx])
+    return rows, targets
+
+
+def random_forest_forecast(dates, values, periods):
+    lag_count = min(6, max(2, len(values) // 2))
+    x_train, y_train = build_lag_features(values, dates, lag_count)
+    if not x_train:
+        return simple_forecast(dates, values, periods, "Insufficient history for RandomForestRegressor")
+
+    model = RandomForestRegressor(
+        n_estimators=300,
+        random_state=42,
+        min_samples_leaf=1,
+        max_features=1.0,
+    )
+    model.fit(np.array(x_train, dtype=float), np.array(y_train, dtype=float))
+
+    rolling_values = [float(v) for v in values]
+    last_date = parse_month(dates[-1])
+    forecast = []
+
+    for step in range(1, periods + 1):
+        target_date = add_months(last_date, step)
+        feature_row = rolling_values[-lag_count:] + [target_date.month, target_date.year, len(rolling_values)]
+        prediction = float(model.predict(np.array([feature_row], dtype=float))[0])
+        prediction = max(prediction, 0.0)
+        forecast.append({"date": target_date.strftime("%Y-%m-01"), "value": round(prediction, 2)})
+        rolling_values.append(prediction)
+
+    fitted = model.predict(np.array(x_train, dtype=float))
+    mae = float(np.mean(np.abs(np.array(y_train, dtype=float) - fitted))) if len(y_train) else None
+    return {
+        "method": "random_forest_regressor",
+        "forecast": forecast,
+        "details": {
+            "estimator": "sklearn.ensemble.RandomForestRegressor",
+            "n_estimators": 300,
+            "lag_months": lag_count,
+            "training_rows": len(x_train),
+            "mean_absolute_error": mae,
+        },
+    }
 
 
 def main():
     if len(sys.argv) < 3:
-        print(json.dumps({'error': 'Usage: budget_forecast.py <input_csv> <predict_months>'}))
+        print(json.dumps({"error": "Usage: budget_forecast.py <input_csv> <predict_months>"}))
         sys.exit(1)
 
     input_csv = sys.argv[1]
-    try:
-        periods = int(sys.argv[2])
-    except:
-        periods = 12
+    periods = int(sys.argv[2]) if sys.argv[2].isdigit() else 12
 
     if not os.path.isfile(input_csv):
-        print(json.dumps({'error': 'Input file not found'}))
+        print(json.dumps({"error": "Input file not found"}))
         sys.exit(1)
 
-    if pd is None or ExponentialSmoothing is None:
-        # use simple fallback
-        try:
-            with open(input_csv, 'r') as f:
-                lines = f.read().strip().splitlines()[1:]
-                dates = []
-                vals = []
-                for ln in lines:
-                    parts = ln.split(',')
-                    if len(parts) >= 2:
-                        dates.append(parts[0])
-                        vals.append(float(parts[1]))
-            res = simple_forecast(dates, vals, periods)
-            print(json.dumps(res))
-            sys.exit(0)
-        except Exception as e:
-            print(json.dumps({'error': 'Fallback forecast failed', 'exc': str(e)}))
-            sys.exit(2)
+    dates = []
+    values = []
+    with open(input_csv, newline="", encoding="utf-8-sig") as handle:
+        reader = csv.DictReader(handle)
+        for row in reader:
+            if not row.get("date"):
+                continue
+            dates.append(row["date"])
+            values.append(float(row.get("amount") or row.get("value") or 0))
 
-    try:
-        df = pd.read_csv(input_csv, parse_dates=['date'])
-        df = df.sort_values('date')
-        df = df.set_index('date')
-        # ensure monthly frequency
-        df = df.asfreq('MS')
-        series = df['amount'].fillna(0)
-
-        method = 'holt_winters'
-        details = {}
-
-        # Choose seasonal if enough history
-        seasonal = 'add' if len(series) >= 24 else None
-        try:
-            model = ExponentialSmoothing(series, trend='add', seasonal=seasonal, seasonal_periods=12 if seasonal else None)
-            fit = model.fit(optimized=True)
-            pred = fit.forecast(periods)
-            history = [{'date': d.strftime('%Y-%m-01'), 'value': float(series.loc[d])} for d in series.index]
-            forecast = [{'date': d.strftime('%Y-%m-01'), 'value': float(pred.loc[d])} for d in pred.index]
-            details['aic'] = getattr(fit, 'aic', None)
-            details['params'] = {k: float(v) for k, v in getattr(fit, 'params', {}).items()} if hasattr(fit, 'params') else {}
-            out = {
-                'method': method,
-                'history': history,
-                'forecast': forecast,
-                'details': details
-            }
-            print(json.dumps(out))
-            sys.exit(0)
-        except Exception as e:
-            # fallback to simple growth
-            dates = [d.strftime('%Y-%m-%d') for d in series.index]
-            vals = [float(v) for v in series.values]
-            res = simple_forecast(dates, vals, periods)
-            res['details'] = 'Holt-Winters failed: ' + str(e)
-            print(json.dumps(res))
-            sys.exit(0)
-    except Exception as e:
-        print(json.dumps({'error': 'Forecast processing failed', 'exc': str(e)}))
+    if not dates:
+        print(json.dumps({"error": "No usable historical rows found"}))
         sys.exit(1)
 
-if __name__ == '__main__':
+    paired = sorted(zip(dates, values), key=lambda item: item[0])
+    dates = [item[0] for item in paired]
+    values = [item[1] for item in paired]
+
+    if RandomForestRegressor is None or np is None:
+        result = simple_forecast(dates, values, periods, "scikit-learn is unavailable")
+    else:
+        result = random_forest_forecast(dates, values, periods)
+
+    result["history"] = [{"date": date, "value": float(value)} for date, value in zip(dates, values)]
+    print(json.dumps(result))
+
+
+if __name__ == "__main__":
     main()

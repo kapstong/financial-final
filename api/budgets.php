@@ -5,6 +5,7 @@ require_once '../includes/database.php';
 require_once '../includes/logger.php';
 require_once '../includes/coa_validation.php';
 require_once '../includes/budget_alerts.php';
+require_once '../includes/python_runner.php';
 
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
@@ -585,6 +586,71 @@ function clampForecastMonths($value, $default = 36, $max = 120) {
     return min($months, $max);
 }
 
+function clampPredictMonths($value, $default = 12, $max = 36) {
+    $months = (int)$value;
+    if ($months < 1) {
+        return $default;
+    }
+    return min($months, $max);
+}
+
+function forecastMonthsForTargetDate($targetDate, $defaultMonths = 12, $maxMonths = 36) {
+    $target = DateTimeImmutable::createFromFormat('Y-m-d', (string)$targetDate);
+    if (!$target) {
+        return $defaultMonths;
+    }
+
+    $currentMonth = new DateTimeImmutable(date('Y-m-01'));
+    $targetMonth = new DateTimeImmutable($target->format('Y-m-01'));
+    if ($targetMonth < $currentMonth) {
+        return 1;
+    }
+
+    $diff = $currentMonth->diff($targetMonth);
+    $months = ($diff->y * 12) + $diff->m + 1;
+    return min(max($months, 1), $maxMonths);
+}
+
+function runRandomForestForecast(array $history, int $predictMonths) {
+    $tmpFile = tempnam(sys_get_temp_dir(), 'budget_forecast_');
+    if ($tmpFile === false) {
+        return ['error' => 'Unable to prepare forecast training data'];
+    }
+
+    $csvPath = $tmpFile . '.csv';
+    rename($tmpFile, $csvPath);
+
+    $handle = fopen($csvPath, 'w');
+    if ($handle === false) {
+        @unlink($csvPath);
+        return ['error' => 'Unable to write forecast training data'];
+    }
+
+    fputcsv($handle, ['date', 'amount']);
+    foreach ($history as $item) {
+        fputcsv($handle, [$item['date'], (float)$item['value']]);
+    }
+    fclose($handle);
+
+    $scriptPath = realpath(__DIR__ . '/../scripts/budget_forecast.py');
+    $result = run_python_script($scriptPath ?: '', [$csvPath, $predictMonths], 45);
+    @unlink($csvPath);
+
+    if (($result['exit_code'] ?? -1) !== 0) {
+        return [
+            'error' => 'Random Forest forecast failed',
+            'details' => trim((string)($result['stderr'] ?? $result['stdout'] ?? ''))
+        ];
+    }
+
+    $payload = json_decode((string)$result['stdout'], true);
+    if (!is_array($payload)) {
+        return ['error' => 'Random Forest forecast returned invalid JSON'];
+    }
+
+    return $payload;
+}
+
 function buildMonthlyHistory(array $rows, $months) {
     $monthMap = [];
     foreach ($rows as $row) {
@@ -612,8 +678,11 @@ function buildMonthlyHistory(array $rows, $months) {
 }
 
 function getForecastData($db) {
-    // Return historical monthly totals plus source lineage for client-side forecasting.
     $months = clampForecastMonths($_GET['months'] ?? 36);
+    $forecastDate = trim((string)($_GET['forecast_date'] ?? ''));
+    $predictMonths = $forecastDate !== ''
+        ? forecastMonthsForTargetDate($forecastDate, 12)
+        : clampPredictMonths($_GET['predict_months'] ?? 12);
     $category = strtolower(trim((string)($_GET['category'] ?? 'combined')));
     $allowedCategories = ['combined', 'disbursements', 'payments_made'];
     if (!in_array($category, $allowedCategories, true)) {
@@ -729,14 +798,31 @@ function getForecastData($db) {
         ];
     }
 
+    $modelResult = runRandomForestForecast($history, $predictMonths);
+    if (isset($modelResult['error'])) {
+        echo json_encode([
+            'error' => $modelResult['error'],
+            'details' => $modelResult['details'] ?? null,
+            'history' => $history
+        ]);
+        return;
+    }
+
     echo json_encode([
         'history' => $history,
+        'forecast' => $modelResult['forecast'] ?? [],
         'summary' => [
             'months' => count($history),
+            'predict_months' => $predictMonths,
+            'forecast_date' => $forecastDate !== '' ? $forecastDate : null,
             'total' => (float)$total,
             'average_monthly' => (float)$avg,
             'selected_category' => $category,
             'source_totals' => $sourceTotals
+        ],
+        'model' => [
+            'method' => $modelResult['method'] ?? 'random_forest_regressor',
+            'details' => $modelResult['details'] ?? null
         ],
         'drivers' => $drivers,
         'lineage' => [
@@ -751,7 +837,7 @@ function getForecastData($db) {
                 'description' => 'Operational and vendor payments captured in AP workflows.'
             ]
         ],
-        'method' => 'history_only'
+        'method' => $modelResult['method'] ?? 'random_forest_regressor'
     ]);
 }
 
