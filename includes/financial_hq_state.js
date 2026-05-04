@@ -39,8 +39,8 @@
             { id: 9702, adjustment_number: 'ADJ-R-2026-201', customer_id: 9203, invoice_id: 9403, adjustment_type: 'debit_memo', adjustment_date: '2026-04-29', amount: 6400, reason: 'Rebilling for additional banquet service hours', type: 'receivable', source: 'seed' }
         ],
         hr_claims: [
-            { id: 'CLM-301', claim_id: 'CLM-301', employee_name: 'Jules Navarro', department: 'HR 3', claim_type: 'Travel Reimbursement', amount: 12880, submitted_at: '2026-04-28T09:15:00', status: 'approved', can_process: true, source: 'seed' },
-            { id: 'CLM-302', claim_id: 'CLM-302', employee_name: 'Mira Santos', department: 'HR 3', claim_type: 'Medical Reimbursement', amount: 9650, submitted_at: '2026-04-29T13:42:00', status: 'approved', can_process: true, source: 'seed' }
+            { id: 'CLM-301', claim_id: 'CLM-301', employee_name: 'Jules Navarro', department: 'Operations', claim_type: 'Travel Reimbursement', amount: 12880, submitted_at: '2026-04-28T09:15:00', status: 'approved', can_process: true, source: 'seed' },
+            { id: 'CLM-302', claim_id: 'CLM-302', employee_name: 'Mira Santos', department: 'People Operations', claim_type: 'Medical Reimbursement', amount: 9650, submitted_at: '2026-04-29T13:42:00', status: 'approved', can_process: true, source: 'seed' }
         ],
         hr_payroll: [
             { id: 'PAY-APR-01', approval_id: 'PAY-APR-01', payroll_period: 'Apr 16-30, 2026', period_display: 'Apr 16-30, 2026', total_amount: 542880, employee_count: 48, submitted_by: 'Compensation Team', submitted_at: '2026-04-30T17:20:00', status: 'pending', can_approve: true, source: 'seed' }
@@ -50,7 +50,7 @@
             { id: 'INC-802', employee_name: 'Rafael Ong', department: 'Operations', position: 'Shift Lead', period: 'April 2026', amount: 12400, status: 'pending', can_process: true, source: 'seed' }
         ],
         disbursements: [
-            { id: 9801, disbursement_number: 'DISB-20260429-301', payee: 'Jules Navarro', disbursement_date: '2026-04-29', amount: 12880, payment_method: 'bank_transfer', reference_number: 'HR3-CLAIM-CLM-301', status: 'processed', source_module: 'claims', source: 'seed' },
+            { id: 9801, disbursement_number: 'DISB-20260429-301', payee: 'Jules Navarro', disbursement_date: '2026-04-29', amount: 12880, payment_method: 'bank_transfer', reference_number: 'REQ-CLM-301', status: 'processed', source_module: 'claims', source: 'seed' },
             { id: 9802, disbursement_number: 'DISB-20260430-302', payee: 'Harborline Utilities Group', disbursement_date: '2026-04-30', amount: 48250, payment_method: 'bank_transfer', reference_number: 'HBG-484920', status: 'pending', source_module: 'ap', source: 'seed' },
             { id: 9803, disbursement_number: 'DISB-20260501-303', payee: 'Payroll Apr 16-30, 2026', disbursement_date: '2026-05-01', amount: 542880, payment_method: 'bank_transfer', reference_number: 'PAYROLL-PAY-APR-01', status: 'pending', source_module: 'payroll', source: 'seed' }
         ],
@@ -61,12 +61,12 @@
         ],
         budget_allocations: [
             { id: 9911, budget_id: 9901, department_id: 'OPS', department: 'Operations', category: 'Operations', total_amount: 1320000, reserved_amount: 118000, utilized_amount: 978500, remaining: 341500, source: 'seed' },
-            { id: 9912, budget_id: 9901, department_id: 'HR3', department: 'HR 3', category: 'Claims and Benefits', total_amount: 860000, reserved_amount: 92000, utilized_amount: 704000, remaining: 156000, source: 'seed' },
+            { id: 9912, budget_id: 9901, department_id: 'PEOPLE', department: 'People Operations', category: 'Workforce Support', total_amount: 860000, reserved_amount: 92000, utilized_amount: 704000, remaining: 156000, source: 'seed' },
             { id: 9913, budget_id: 9902, department_id: 'SALES', department: 'Sales', category: 'Revenue Programs', total_amount: 725000, reserved_amount: 84000, utilized_amount: 612400, remaining: 112600, source: 'seed' },
             { id: 9914, budget_id: 9903, department_id: 'FAC', department: 'Facilities', category: 'Maintenance', total_amount: 980000, reserved_amount: 140000, utilized_amount: 568400, remaining: 411600, source: 'seed' }
         ],
         budget_adjustments: [
-            { id: 9921, adjustment_number: 'BGT-ADJ-2026-021', budget_id: 9901, department_id: 'HR3', department_name: 'HR 3', vendor_id: 9102, requested_by_name: 'Rosa Valdez', adjustment_type: 'supplemental', amount: 85000, reason: 'Higher-than-expected medical reimbursements for April cycle', effective_date: '2026-05-06', status: 'pending', source: 'seed' },
+            { id: 9921, adjustment_number: 'BGT-ADJ-2026-021', budget_id: 9901, department_id: 'PEOPLE', department_name: 'People Operations', vendor_id: 9102, requested_by_name: 'Rosa Valdez', adjustment_type: 'supplemental', amount: 85000, reason: 'Higher-than-expected workforce reimbursements for April cycle', effective_date: '2026-05-06', status: 'pending', source: 'seed' },
             { id: 9922, adjustment_number: 'BGT-ADJ-2026-022', budget_id: 9903, department_id: 'FAC', department_name: 'Facilities', vendor_id: 9103, requested_by_name: 'Miguel Ramos', adjustment_type: 'reallocation', amount: 64000, reason: 'Critical refrigeration preventive maintenance package', effective_date: '2026-05-10', status: 'approved', source: 'seed' }
         ]
     };
@@ -122,6 +122,15 @@
         });
 
         state.budget_allocations = (state.budget_allocations || []).map(item => {
+            if (String(item.id) === '9912' && item.source === 'seed') {
+                return {
+                    ...item,
+                    department_id: 'PEOPLE',
+                    department: 'People Operations',
+                    category: 'Workforce Support'
+                };
+            }
+
             if (String(item.id) !== '9914' || item.source !== 'seed') {
                 return item;
             }
@@ -130,6 +139,29 @@
                 ...item,
                 utilized_amount: 568400,
                 remaining: 411600
+            };
+        });
+
+        state.hr_claims = (state.hr_claims || []).map(item => {
+            if (String(item.id) === 'CLM-301' && item.source === 'seed') {
+                return { ...item, department: 'Operations' };
+            }
+            if (String(item.id) === 'CLM-302' && item.source === 'seed') {
+                return { ...item, department: 'People Operations' };
+            }
+            return item;
+        });
+
+        state.budget_adjustments = (state.budget_adjustments || []).map(item => {
+            if (String(item.id) !== '9921' || item.source !== 'seed') {
+                return item;
+            }
+
+            return {
+                ...item,
+                department_id: 'PEOPLE',
+                department_name: 'People Operations',
+                reason: 'Higher-than-expected workforce reimbursements for April cycle'
             };
         });
 

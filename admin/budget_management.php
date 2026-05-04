@@ -843,7 +843,7 @@ if ($budgetRequestedByName === '') {
             <div class="card-body">
                 <div class="budget-overview-copy">
                     <h4>Budget Command Center</h4>
-                    <p>Manage local budgets, monitor live allocation pressure, and keep HR3-linked spending visible before it becomes a problem.</p>
+                    <p>Manage organization-wide budgets, monitor live allocation pressure, and keep department spending visible before it becomes a problem.</p>
                 </div>
                 <div class="budget-overview-grid">
                     <div class="budget-overview-pill">
@@ -1106,7 +1106,7 @@ if ($budgetRequestedByName === '') {
                     <div class="col-md-12">
                         <div class="card">
                             <div class="card-header">
-                                <h6>Claims vs Budget</h6>
+                                <h6>Spending Requests vs Budget</h6>
                             </div>
                             <div class="card-body">
                                 <div class="table-responsive">
@@ -1114,22 +1114,22 @@ if ($budgetRequestedByName === '') {
                                         <thead>
                                             <tr>
                                                 <th>Department</th>
-                                                <th>Claims Approved</th>
-                                                <th>Claims Pending</th>
-                                                <th>Claims Amount</th>
+                                                <th>Requests Approved</th>
+                                                <th>Requests Pending</th>
+                                                <th>Request Amount</th>
                                                 <th>Budget Remaining</th>
                                                 <th>Status</th>
                                             </tr>
                                         </thead>
                                         <tbody id="claimsBudgetBody">
                                             <tr>
-                                                <td colspan="6" class="text-center text-muted">Loading claims...</td>
+                                                <td colspan="6" class="text-center text-muted">Loading requests...</td>
                                             </tr>
                                         </tbody>
                                     </table>
                                 </div>
                                 <div class="d-flex justify-content-end">
-                                    <a class="btn btn-outline-primary btn-sm" href="hr3_budget_allocation.php"><i class="fas fa-link me-2"></i>View HR3 Budget Allocation</a>
+                                    <button class="btn btn-outline-primary btn-sm" type="button" data-bs-toggle="tab" data-bs-target="#allocation"><i class="fas fa-sitemap me-2"></i>Review Budget Allocations</button>
                                 </div>
                             </div>
                         </div>
@@ -1216,14 +1216,14 @@ if ($budgetRequestedByName === '') {
                     <div class="col-md-12">
                         <div class="card">
                             <div class="card-header">
-                                <h6>HR3 Claims Over Budget Queue</h6>
+                                <h6>Spending Requests Over Budget Queue</h6>
                             </div>
                             <div class="card-body">
                                 <div class="table-responsive">
                                     <table class="table table-striped">
                                         <thead>
                                             <tr>
-                                                <th>Claim ID</th>
+                                                <th>Request ID</th>
                                                 <th>Employee</th>
                                                 <th>Department</th>
                                                 <th>Amount</th>
@@ -1233,13 +1233,13 @@ if ($budgetRequestedByName === '') {
                                         </thead>
                                         <tbody id="claimsOverBudgetBody">
                                             <tr>
-                                                <td colspan="6" class="text-center text-muted">Loading claims...</td>
+                                                <td colspan="6" class="text-center text-muted">Loading requests...</td>
                                             </tr>
                                         </tbody>
                                     </table>
                                 </div>
                                 <div class="d-flex justify-content-end">
-                                    <a class="btn btn-outline-primary btn-sm" href="hr3_budget_allocation.php"><i class="fas fa-link me-2"></i>Open HR3 Claims Review</a>
+                                    <button class="btn btn-outline-primary btn-sm" type="button" data-bs-toggle="tab" data-bs-target="#allocation"><i class="fas fa-sitemap me-2"></i>Open Allocation Review</button>
                                 </div>
                             </div>
                         </div>
@@ -1329,7 +1329,7 @@ if ($budgetRequestedByName === '') {
                             <div class="card-body">
                                 <ul class="list-unstyled mb-0">
                                     <li class="mb-2"><i class="fas fa-check text-success me-2"></i>Provide clear financial justification.</li>
-                                    <li class="mb-2"><i class="fas fa-check text-success me-2"></i>Attach supporting HR3 claim data if applicable.</li>
+                                    <li class="mb-2"><i class="fas fa-check text-success me-2"></i>Attach supporting request, invoice, or payroll data if applicable.</li>
                                     <li class="mb-2"><i class="fas fa-check text-success me-2"></i>Allow 3-5 business days for review.</li>
                                     <li><i class="fas fa-check text-success me-2"></i>Approved adjustments update allocations automatically.</li>
                                 </ul>
@@ -1372,10 +1372,10 @@ if ($budgetRequestedByName === '') {
                     <div class="col-md-6">
                         <div class="card">
                             <div class="card-header">
-                                <h6>HR3 Claims Impact Report</h6>
+                                <h6>Spending Requests Impact Report</h6>
                             </div>
                             <div class="card-body">
-                                <p>Summarizes HR3 claim volumes, approvals, and budget impact across departments.</p>
+                                <p>Summarizes request volumes, approvals, and budget impact across departments.</p>
                                 <button class="btn btn-primary" id="generateClaimsImpactBtn">Generate Report</button>
                             </div>
                         </div>
@@ -1399,7 +1399,7 @@ if ($budgetRequestedByName === '') {
                                 <h6>Forecast Snapshot</h6>
                             </div>
                             <div class="card-body">
-                                <p>Rolling 90-day forecast with risk flags for claims-heavy departments.</p>
+                                <p>Rolling 90-day forecast with risk flags for departments nearing budget limits.</p>
                                 <button class="btn btn-primary" id="generateForecastSnapshotBtn">Generate Report</button>
                             </div>
                         </div>
@@ -1890,10 +1890,10 @@ if ($budgetRequestedByName === '') {
             const trackingBody = document.getElementById('claimsBudgetBody');
             const alertsBody = document.getElementById('claimsOverBudgetBody');
             if (trackingBody) {
-                trackingBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Loading claims...</td></tr>';
+                trackingBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Loading requests...</td></tr>';
             }
             if (alertsBody) {
-                alertsBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Loading claims...</td></tr>';
+                alertsBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Loading requests...</td></tr>';
             }
 
             try {
@@ -1901,17 +1901,17 @@ if ($budgetRequestedByName === '') {
                 const payload = await response.json();
 
                 if (!payload.success) {
-                    throw new Error(payload.error || 'Failed to load HR3 claims');
+                    throw new Error(payload.error || 'Failed to load spending requests');
                 }
 
                 const result = payload.result || {};
                 if (result.success === false) {
-                    throw new Error(result.error || 'Failed to load HR3 claims');
+                    throw new Error(result.error || 'Failed to load spending requests');
                 }
 
                 const breakdown = result.data || result;
                 if (!breakdown || !breakdown.summary) {
-                    throw new Error('No HR3 claims data available');
+                    throw new Error('No spending request data available');
                 }
 
                 currentHr3ClaimsBreakdown = breakdown;
@@ -1919,12 +1919,12 @@ if ($budgetRequestedByName === '') {
                 renderClaimsOverBudget();
 
             } catch (error) {
-                console.error('Error loading HR3 claims:', error);
+                console.error('Error loading spending requests:', error);
                 if (trackingBody) {
-                    trackingBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No claims data available.</td></tr>';
+                    trackingBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No request data available.</td></tr>';
                 }
                 if (alertsBody) {
-                    alertsBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No claims data available.</td></tr>';
+                    alertsBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No request data available.</td></tr>';
                 }
             }
         }
@@ -1957,7 +1957,7 @@ if ($budgetRequestedByName === '') {
             }
 
             if (!currentHr3ClaimsBreakdown || !currentHr3ClaimsBreakdown.summary) {
-                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No claims data available.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No request data available.</td></tr>';
                 return;
             }
 
@@ -1966,7 +1966,7 @@ if ($budgetRequestedByName === '') {
             const claims = Array.isArray(currentHr3ClaimsBreakdown.claims) ? currentHr3ClaimsBreakdown.claims : [];
 
             if (departments.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No claims data available.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No request data available.</td></tr>';
                 return;
             }
 
@@ -2002,7 +2002,7 @@ if ($budgetRequestedByName === '') {
             }
 
             if (!currentHr3ClaimsBreakdown || !Array.isArray(currentHr3ClaimsBreakdown.claims)) {
-                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No claims data available.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No request data available.</td></tr>';
                 return;
             }
 
@@ -2016,7 +2016,7 @@ if ($budgetRequestedByName === '') {
             });
 
             if (overBudgetClaims.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No claims over budget.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No requests over budget.</td></tr>';
                 return;
             }
 
@@ -2892,7 +2892,7 @@ if ($budgetRequestedByName === '') {
                     return name ? `Category: ${name}` : `Category #${recordId}`;
                 }
                 case 'hr3_integrations':
-                    return 'HR3 Claims';
+                    return 'Claims Integration';
                 default:
                     return log.table_name ? `${log.table_name} #${recordId}` : `Record #${recordId}`;
             }
@@ -2910,7 +2910,7 @@ if ($budgetRequestedByName === '') {
         function formatAuditSource(log, newValues, oldValues) {
             let source = (newValues && newValues.source) || (oldValues && oldValues.source);
             if (!source) {
-                source = log.table_name === 'hr3_integrations' ? 'HR3 API' : 'Budget Management UI';
+                source = log.table_name === 'hr3_integrations' ? 'Claims API' : 'Budget Management UI';
             }
             const origin = (newValues && newValues.origin) || (oldValues && oldValues.origin);
             return origin ? `${source} (${origin})` : source;
@@ -3414,7 +3414,7 @@ if ($budgetRequestedByName === '') {
 
         function generateClaimsImpactReport() {
             if (!currentHr3ClaimsBreakdown || !Array.isArray(currentHr3ClaimsBreakdown.claims) || !currentHr3ClaimsBreakdown.claims.length) {
-                showAlert('No HR3 claims data is available yet.', 'warning');
+                showAlert('No spending request data is available yet.', 'warning');
                 return;
             }
 
@@ -3424,17 +3424,17 @@ if ($budgetRequestedByName === '') {
             const pendingCount = claims.filter(item => item.status === 'pending').length;
 
             showReport(
-                'HR3 Claims Impact Report',
+                'Spending Requests Impact Report',
                 `
                     ${buildReportSummaryItems([
-                        { label: 'Claims', value: totalClaims.toLocaleString() },
+                        { label: 'Requests', value: totalClaims.toLocaleString() },
                         { label: 'Total Amount', value: 'PHP ' + totalAmount.toLocaleString() },
                         { label: 'Pending', value: pendingCount.toLocaleString() }
                     ])}
                     <table>
                         <thead>
                             <tr>
-                                <th>Claim ID</th>
+                                <th>Request ID</th>
                                 <th>Employee</th>
                                 <th>Department</th>
                                 <th>Amount</th>
