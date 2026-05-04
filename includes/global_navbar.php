@@ -67,6 +67,31 @@ $privacyModeEnabled = privacyModeEnabled();
         opacity: 0.55 !important;
         cursor: not-allowed !important;
     }
+    body.privacy-mode-active canvas {
+        filter: blur(10px) saturate(0.65);
+        opacity: 0.42;
+        transition: filter 0.2s ease, opacity 0.2s ease;
+    }
+    body.privacy-mode-active .chart-container {
+        position: relative;
+    }
+    body.privacy-mode-active .chart-container::after {
+        content: "Privacy mode";
+        position: absolute;
+        inset: 50% auto auto 50%;
+        transform: translate(-50%, -50%);
+        z-index: 2;
+        padding: 0.45rem 0.85rem;
+        border-radius: 999px;
+        background: rgba(15, 28, 73, 0.86);
+        color: #fff;
+        font-size: 0.82rem;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        pointer-events: none;
+        white-space: nowrap;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.22);
+    }
 </style>
 <nav class="navbar navbar-expand-lg navbar-light bg-white mb-4 shadow-sm">
     <div class="container-fluid">
@@ -173,6 +198,7 @@ $privacyModeEnabled = privacyModeEnabled();
         function updateButton() {
             const button = document.getElementById('privacyEyeButton');
             const icon = document.getElementById('privacyEyeIcon');
+            document.body?.classList.toggle('privacy-mode-active', privacyMode);
             if (!button || !icon) return;
             button.dataset.privacyMode = privacyMode ? '1' : '0';
             icon.classList.toggle('fa-eye-slash', privacyMode);
