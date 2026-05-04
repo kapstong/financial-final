@@ -853,14 +853,8 @@ body {
                                     </div>
                                 </div>
                                 <p class="mb-4" style="color: #6c757d; font-size: 1.1rem; line-height: 1.6;">
-                                    Forecasting now drives the dashboard view. Validate projected outflows, compare
-                                    them against the annual plan, and trace each driver back to its recorded source.
+                                    Monitor your financial performance with comprehensive charts and analytics. Track income, expenses, and cash flow trends to make informed decisions.
                                 </p>
-                                <div class="d-flex flex-wrap gap-3 justify-content-center justify-content-lg-start">
-                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2">
-                                        <i class="fas fa-crystal-ball me-2"></i>Forecasting is the active command view
-                                    </span>
-                                </div>
                             </div>
                             <div class="col-lg-4 text-center mt-4 mt-lg-0">
                                 <div class="position-relative">
@@ -910,125 +904,72 @@ body {
             <div class="col-md-12">
                 <div class="card">
                     <div class="card-header">
-                        <ul class="nav nav-tabs card-header-tabs" id="dashboardTabs" role="tablist">
-                            <li class="nav-item">
-                                <a class="nav-link active" id="forecasting-tab" data-bs-toggle="tab" href="#forecasting" role="tab" aria-controls="forecasting" aria-selected="true"><i class="fas fa-crystal-ball me-1"></i>Forecasting</a>
-                            </li>
-                        </ul>
+                        <h5 style="margin: 0; color: #1e2936; font-weight: 700;">Dashboard Analytics</h5>
                     </div>
-                    <div class="card-body">
-                        <div class="tab-content" id="dashboardTabsContent">
-                            <div class="tab-pane fade show active" id="forecasting" role="tabpanel" aria-labelledby="forecasting-tab" style="padding-bottom: 100px;">
-                                <!-- Key Metrics Row -->
-                                <div class="row mb-4">
-                                    <div class="col-lg-3 col-md-6 mb-3">
-                                        <div class="card h-100">
-                                            <div class="card-body text-center">
-                                                <div class="d-flex align-items-center justify-content-center mb-2">
-                                                    <i class="fas fa-peso-sign fa-2x text-success me-2"></i>
-                                                    <div>
-                                                        <h5 class="mb-0">₱<?php echo number_format($totalIncome, 2); ?></h5>
-                                                        <small class="text-muted">Total Income</small>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="col-lg-3 col-md-6 mb-3">
-                                        <div class="card h-100">
-                                            <div class="card-body text-center">
-                                                <div class="d-flex align-items-center justify-content-center mb-2">
-                                                    <i class="fas fa-credit-card fa-2x text-danger me-2"></i>
-                                                    <div>
-                                                        <h5 class="mb-0">₱<?php echo number_format($totalExpenses, 2); ?></h5>
-                                                        <small class="text-muted">Total Expenses</small>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="col-lg-3 col-md-6 mb-3">
-                                        <div class="card h-100">
-                                            <div class="card-body text-center">
-                                                <div class="d-flex align-items-center justify-content-center mb-2">
-                                                    <i class="fas fa-chart-line fa-2x text-primary me-2"></i>
-                                                    <div>
-                                                        <h5 class="mb-0">₱<?php echo number_format($netProfit, 2); ?></h5>
-                                                        <small class="text-muted">Net Profit</small>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="col-lg-3 col-md-6 mb-3">
-                                        <div class="card h-100">
-                                            <div class="card-body text-center">
-                                                <div class="d-flex align-items-center justify-content-center mb-2">
-                                                    <i class="fas fa-balance-scale fa-2x text-warning me-2"></i>
-                                                    <div>
-                                                        <h5 class="mb-0">₱<?php echo number_format($cashBalance, 2); ?></h5>
-                                                        <small class="text-muted">Cash Balance</small>
-                                                    </div>
-                                                </div>
+                    <div class="card-body" style="padding-bottom: 100px;">
+                        <!-- Key Metrics Row -->
+                        <div class="row mb-4">
+                            <div class="col-lg-3 col-md-6 mb-3">
+                                <div class="card h-100" style="background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);">
+                                    <div class="card-body text-center">
+                                        <div class="d-flex align-items-center justify-content-center mb-2">
+                                            <i class="fas fa-peso-sign fa-2x text-success me-2"></i>
+                                            <div>
+                                                <h5 class="mb-0">₱<?php echo number_format($totalIncome, 2); ?></h5>
+                                                <small class="text-muted">Total Income</small>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
-
-                                <!-- Recent Activity and Quick Actions -->
-                                <div class="row">
-                                    <div class="col-lg-8 mb-4">
-                                        <div class="card h-100">
-                                            <div class="card-header d-flex align-items-center">
-                                                <i class="fas fa-history text-primary me-3 fa-lg"></i>
-                                                <div>
-                                                    <h6 class="mb-0">Recent Activity</h6>
-                                                    <small class="text-muted">Latest transactions and updates</small>
-                                                </div>
-                                            </div>
-                                            <div class="card-body">
-                                                <?php if (!empty($recentTransactions)): ?>
-                                                    <div class="list-group list-group-flush">
-                                                        <?php foreach ($recentTransactions as $transaction): ?>
-                                                            <div class="list-group-item px-0">
-                                                                <div class="d-flex align-items-center">
-                                                                    <div class="flex-shrink-0 me-3">
-                                                                    </div>
-                                                                    <div class="flex-grow-1">
-                                                                        <h6 class="mb-1"><?php echo htmlspecialchars($transaction['description']); ?></h6>
-                                                                        <small class="text-muted">
-                                                                            <?php echo date('M j, Y', strtotime($transaction['date'])); ?> •
-                                                                            <?php echo htmlspecialchars($transaction['payment_method']); ?>
-                                                                            <?php if (!empty($transaction['reference_number'])): ?>
-                                                                                • Ref: <?php echo htmlspecialchars($transaction['reference_number']); ?>
-                                                                            <?php endif; ?>
-                                                                        </small>
-                                                                    </div>
-                                                                    <div class="flex-shrink-0 text-end">
-                                                                        <div class="fw-bold text-<?php echo $transaction['type'] === 'payment_received' ? 'success' : 'danger'; ?>">
-                                                                            <?php echo $transaction['type'] === 'payment_received' ? '+' : '-'; ?>₱<?php echo number_format($transaction['amount'], 2); ?>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        <?php endforeach; ?>
-                                                    </div>
-                                                <?php else: ?>
-                                                    <div class="text-center py-5">
-                                                        <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
-                                                        <h6 class="text-muted">No Recent Activity</h6>
-                                                        <p class="text-muted small">Your recent transactions will appear here</p>
-                                                    </div>
-                                                <?php endif; ?>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
                             </div>
-                            <!-- Analytics Tab -->
-                            <div class="tab-pane fade" id="analytics" role="tabpanel" aria-labelledby="analytics-tab" style="padding-bottom: 100px;">
-                                <div class="row g-4">
+                            <div class="col-lg-3 col-md-6 mb-3">
+                                <div class="card h-100" style="background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);">
+                                    <div class="card-body text-center">
+                                        <div class="d-flex align-items-center justify-content-center mb-2">
+                                            <i class="fas fa-credit-card fa-2x text-danger me-2"></i>
+                                            <div>
+                                                <h5 class="mb-0">₱<?php echo number_format($totalExpenses, 2); ?></h5>
+                                                <small class="text-muted">Total Expenses</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-lg-3 col-md-6 mb-3">
+                                <div class="card h-100" style="background: linear-gradient(135deg, #cfe2ff 0%, #b6d4fe 100%);">
+                                    <div class="card-body text-center">
+                                        <div class="d-flex align-items-center justify-content-center mb-2">
+                                            <i class="fas fa-chart-line fa-2x text-primary me-2"></i>
+                                            <div>
+                                                <h5 class="mb-0">₱<?php echo number_format($netProfit, 2); ?></h5>
+                                                <small class="text-muted">Net Profit</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-lg-3 col-md-6 mb-3">
+                                <div class="card h-100" style="background: linear-gradient(135deg, #fff3cd 0%, #ffe69c 100%);">
+                                    <div class="card-body text-center">
+                                        <div class="d-flex align-items-center justify-content-center mb-2">
+                                            <i class="fas fa-balance-scale fa-2x text-warning me-2"></i>
+                                            <div>
+                                                <h5 class="mb-0">₱<?php echo number_format($cashBalance, 2); ?></h5>
+                                                <small class="text-muted">Cash Balance</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Charts and Graphs Section - Highlighted -->
+                        <div class="mb-4">
+                            <div style="background: linear-gradient(135deg, #e8f4f8 0%, #ffffff 100%); border-left: 4px solid #007bff; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                                <h6 style="margin: 0; color: #0c5460; font-weight: 700; font-size: 1.1rem;"><i class="fas fa-chart-line me-2"></i>Financial Analytics</h6>
+                                <small style="color: #6c757d;">Key performance indicators and trends</small>
+                            </div>
+                        <div class="row g-4">
                                     <div class="col-lg-6 col-xl-6">
                                         <div class="card h-100">
                                             <div class="card-header d-flex align-items-center">
@@ -1098,118 +1039,52 @@ body {
 
                             <!-- Forecasting (moved from Budget Management) -->
                             <div class="row mt-4" data-dashboard-forecast-section="1">
-                                <div class="col-lg-6">
-                                    <div class="card h-100">
-                                        <div class="card-header d-flex align-items-center">
-                                            <i class="fas fa-crystal-ball text-primary me-3 fa-lg"></i>
-                                            <div>
-                                                <h6 class="mb-0">Forecasting</h6>
-                                                <small class="text-muted">Projected outflows with traceable source lineage and exportable detail</small>
-                                            </div>
-                                        </div>
-                                        <div class="card-body">
-                                            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-                                                <div class="d-flex flex-wrap gap-2">
-                                                    <select class="form-select form-select-sm" id="forecastSourceFilter" style="width: 190px;">
-                                                        <option value="combined">All Cash Outflows</option>
-                                                        <option value="disbursements">Disbursements Only</option>
-                                                        <option value="payments_made">Payments Made Only</option>
-                                                    </select>
-                                                    <select class="form-select form-select-sm" id="forecastMonthsFilter" style="width: 150px;">
-                                                        <option value="24">24 Months</option>
-                                                        <option value="36">36 Months</option>
-                                                        <option value="48" selected>48 Months</option>
-                                                        <option value="60">60 Months</option>
-                                                    </select>
-                                                </div>
-                                                <div class="d-flex gap-2">
-                                                    <button id="refreshForecastBtn" class="btn btn-outline-secondary btn-sm"><i class="fas fa-rotate me-2"></i>Refresh Forecast</button>
-                                                    <button id="forecastExportBtn" class="btn btn-primary btn-sm"><i class="fas fa-download me-2"></i>Export Forecast</button>
-                                                </div>
-                                            </div>
-                                            <div class="row mb-3">
-                                                <div class="col-md-4 mb-3 mb-md-0">
-                                                    <div class="card forecast-card">
-                                                        <div class="card-body">
-                                                            <h6>Projected Year-End Outflow</h6>
-                                                            <h3 id="projectedYearEnd">Loading...</h3>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <div class="col-md-4 mb-3 mb-md-0">
-                                                    <div class="card forecast-card">
-                                                        <div class="card-body">
-                                                            <h6>Current Monthly Run Rate</h6>
-                                                            <h3 id="forecastRunRate">Loading...</h3>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <div class="col-md-4">
-                                                    <div class="card forecast-card">
-                                                        <div class="card-body">
-                                                            <h6>Budget Variance</h6>
-                                                            <h3 id="expectedVariance">Loading...</h3>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <div class="chart-container mb-3">
-                                                <canvas id="forecastChart"></canvas>
-                                            </div>
-                                            <div class="row g-3">
-                                                <div class="col-md-4">
-                                                    <div class="border rounded p-3 h-100">
-                                                        <small class="text-uppercase text-muted d-block mb-1">Coverage</small>
-                                                        <div class="fw-semibold" id="forecastCoverageSummary">Loading...</div>
-                                                    </div>
-                                                </div>
-                                                <div class="col-md-4">
-                                                    <div class="border rounded p-3 h-100">
-                                                        <small class="text-uppercase text-muted d-block mb-1">Lineage</small>
-                                                        <div class="fw-semibold" id="forecastLineageSummary">Loading...</div>
-                                                    </div>
-                                                </div>
-                                                <div class="col-md-4">
-                                                    <div class="border rounded p-3 h-100">
-                                                        <small class="text-uppercase text-muted d-block mb-1">Dominant Source</small>
-                                                        <div class="fw-semibold" id="forecastSourceSummary">Loading...</div>
-                                                    </div>
-                                                </div>
-                                            </div>
+                            <div class="col-12">
+                                <div class="card h-100">
+                                    <div class="card-header d-flex align-items-center">
+                                        <i class="fas fa-history text-primary me-3 fa-lg"></i>
+                                        <div>
+                                            <h6 class="mb-0">Recent Activity</h6>
+                                            <small class="text-muted">Latest transactions and updates</small>
                                         </div>
                                     </div>
-                                </div>
-                                <div class="col-lg-6">
-                                    <div class="card h-100">
-                                        <div class="card-header d-flex align-items-center">
-                                            <i class="fas fa-list text-secondary me-3 fa-lg"></i>
-                                            <div>
-                                                <h6 class="mb-0">Forecast Drivers</h6>
-                                                <small class="text-muted">Key items influencing the forecast</small>
+                                    <div class="card-body">
+                                        <?php if (!empty($recentTransactions)): ?>
+                                            <div class="list-group list-group-flush">
+                                                <?php foreach ($recentTransactions as $transaction): ?>
+                                                    <div class="list-group-item px-0">
+                                                        <div class="d-flex align-items-center">
+                                                            <div class="flex-shrink-0 me-3">
+                                                            </div>
+                                                            <div class="flex-grow-1">
+                                                                <h6 class="mb-1"><?php echo htmlspecialchars($transaction['description']); ?></h6>
+                                                                <small class="text-muted">
+                                                                    <?php echo date('M j, Y', strtotime($transaction['date'])); ?> •
+                                                                    <?php echo htmlspecialchars($transaction['payment_method']); ?>
+                                                                    <?php if (!empty($transaction['reference_number'])): ?>
+                                                                        • Ref: <?php echo htmlspecialchars($transaction['reference_number']); ?>
+                                                                    <?php endif; ?>
+                                                                </small>
+                                                            </div>
+                                                            <div class="flex-shrink-0 text-end">
+                                                                <div class="fw-bold text-<?php echo $transaction['type'] === 'payment_received' ? 'success' : 'danger'; ?>">
+                                                                    <?php echo $transaction['type'] === 'payment_received' ? '+' : '-'; ?>₱<?php echo number_format($transaction['amount'], 2); ?>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                <?php endforeach; ?>
                                             </div>
-                                        </div>
-                                        <div class="card-body">
-                                            <div class="table-responsive">
-                                                <table class="table table-striped">
-                                                    <thead>
-                                                        <tr>
-                                                            <th>Month</th>
-                                                            <th>Total</th>
-                                                            <th>Disbursements</th>
-                                                            <th>Payments Made</th>
-                                                            <th>Notes</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody id="forecastDriversBody">
-                                                        <tr><td colspan="5" class="text-center text-muted">Loading forecast drivers...</td></tr>
-                                                    </tbody>
-                                                </table>
+                                        <?php else: ?>
+                                            <div class="text-center py-5">
+                                                <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                                                <h6 class="text-muted">No Recent Activity</h6>
+                                                <p class="text-muted small">Your recent transactions will appear here</p>
                                             </div>
-                                        </div>
+                                        <?php endif; ?>
                                     </div>
                                 </div>
                             </div>
-
                         </div>
                     </div>
                 </div>
@@ -1229,25 +1104,7 @@ body {
         let dashboardForecastState = null;
 
         function mergeDashboardSections() {
-            const forecastingPane = document.getElementById('forecasting');
-            const analyticsPane = document.getElementById('analytics');
-            if (!forecastingPane || !analyticsPane) {
-                return;
-            }
-
-            const forecastSection = analyticsPane.querySelector('[data-dashboard-forecast-section="1"]');
-            if (forecastSection) {
-                forecastingPane.insertBefore(forecastSection, forecastingPane.firstChild);
-            }
-
-            Array.from(analyticsPane.children).forEach(child => {
-                if (forecastSection && child === forecastSection) {
-                    return;
-                }
-                forecastingPane.appendChild(child);
-            });
-
-            analyticsPane.remove();
+            // No longer needed - dashboard layout reorganized
         }
 
         function formatForecastCurrency(value) {
