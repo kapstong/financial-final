@@ -6,6 +6,8 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+require_once __DIR__ . '/privacy.php';
+
 function format_currency($amount, $symbol = '₱', $decimals = 2)
 {
     // Normalize amount
@@ -16,8 +18,8 @@ function format_currency($amount, $symbol = '₱', $decimals = 2)
 
     // If symbol is the unicode peso, render it before the amount
     if ($symbol === '\u20B1' || $symbol === '&#8369;' || $symbol === '₱') {
-        return '₱' . $formatted;
+        return privacyMoneyHtml('₱' . $formatted);
     }
 
-    return $symbol . $formatted;
+    return privacyMoneyHtml($symbol . $formatted);
 }
