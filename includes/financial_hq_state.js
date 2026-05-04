@@ -1,8 +1,9 @@
 (function() {
     'use strict';
 
-    const STORAGE_KEY = 'atieraFinancialHQStateV2';
-    const LEGACY_STORAGE_KEY = 'atieraFinancialHQStateV1';
+    const STORAGE_KEY = 'atieraFinancialHQStateV3';
+    const LEGACY_STORAGE_KEY = 'atieraFinancialHQStateV2';
+    const OLDEST_LEGACY_STORAGE_KEY = 'atieraFinancialHQStateV1';
     const CHANGE_KEY = 'atieraFinancialHQStateChangedAt';
     const TODAY = new Date();
 
@@ -56,13 +57,13 @@
         budget_plans: [
             { id: 9901, name: 'FY2026 Core Operations Plan', start_date: '2026-01-01', end_date: '2026-12-31', total_amount: 4200000, utilized_amount: 2785000, status: 'active', created_by_name: 'Finance Strategy Office', source: 'seed', is_external: false },
             { id: 9902, name: 'Guest Experience Acceleration', start_date: '2026-04-01', end_date: '2026-09-30', total_amount: 1325000, utilized_amount: 864200, status: 'active', created_by_name: 'Commercial Planning', source: 'seed', is_external: false },
-            { id: 9903, name: 'Facilities Reliability Program', start_date: '2026-02-01', end_date: '2026-11-30', total_amount: 1680000, utilized_amount: 1195000, status: 'active', created_by_name: 'Operations Finance', source: 'seed', is_external: false }
+            { id: 9903, name: 'Facilities Reliability Program', start_date: '2026-02-01', end_date: '2026-11-30', total_amount: 1680000, utilized_amount: 872400, status: 'active', created_by_name: 'Operations Finance', source: 'seed', is_external: false }
         ],
         budget_allocations: [
             { id: 9911, budget_id: 9901, department_id: 'OPS', department: 'Operations', category: 'Operations', total_amount: 1320000, reserved_amount: 118000, utilized_amount: 978500, remaining: 341500, source: 'seed' },
             { id: 9912, budget_id: 9901, department_id: 'HR3', department: 'HR 3', category: 'Claims and Benefits', total_amount: 860000, reserved_amount: 92000, utilized_amount: 704000, remaining: 156000, source: 'seed' },
             { id: 9913, budget_id: 9902, department_id: 'SALES', department: 'Sales', category: 'Revenue Programs', total_amount: 725000, reserved_amount: 84000, utilized_amount: 612400, remaining: 112600, source: 'seed' },
-            { id: 9914, budget_id: 9903, department_id: 'FAC', department: 'Facilities', category: 'Maintenance', total_amount: 980000, reserved_amount: 140000, utilized_amount: 882300, remaining: 97700, source: 'seed' }
+            { id: 9914, budget_id: 9903, department_id: 'FAC', department: 'Facilities', category: 'Maintenance', total_amount: 980000, reserved_amount: 140000, utilized_amount: 568400, remaining: 411600, source: 'seed' }
         ],
         budget_adjustments: [
             { id: 9921, adjustment_number: 'BGT-ADJ-2026-021', budget_id: 9901, department_id: 'HR3', department_name: 'HR 3', vendor_id: 9102, requested_by_name: 'Rosa Valdez', adjustment_type: 'supplemental', amount: 85000, reason: 'Higher-than-expected medical reimbursements for April cycle', effective_date: '2026-05-06', status: 'pending', source: 'seed' },
@@ -76,7 +77,7 @@
 
     function loadState() {
         try {
-            const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
+            const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY) || localStorage.getItem(OLDEST_LEGACY_STORAGE_KEY);
             if (!raw) {
                 return null;
             }
@@ -108,18 +109,45 @@
         return Array.from(map.values());
     }
 
+    function normalizeSeedState(state) {
+        state.budget_plans = (state.budget_plans || []).map(item => {
+            if (String(item.id) !== '9903' || item.source !== 'seed') {
+                return item;
+            }
+
+            return {
+                ...item,
+                utilized_amount: 872400
+            };
+        });
+
+        state.budget_allocations = (state.budget_allocations || []).map(item => {
+            if (String(item.id) !== '9914' || item.source !== 'seed') {
+                return item;
+            }
+
+            return {
+                ...item,
+                utilized_amount: 568400,
+                remaining: 411600
+            };
+        });
+
+        return state;
+    }
+
     function ensureState() {
         const existing = loadState();
         if (!existing) {
             return saveState(clone(SEED_STATE));
         }
 
-        const nextState = clone(existing);
+        const nextState = normalizeSeedState(clone(existing));
         Object.keys(SEED_STATE).forEach(key => {
             nextState[key] = mergeById(nextState[key] || [], SEED_STATE[key] || []);
         });
 
-        return saveState(nextState);
+        return saveState(normalizeSeedState(nextState));
     }
 
     function getState() {
