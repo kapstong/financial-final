@@ -1497,6 +1497,11 @@ if ($budgetRequestedByName === '') {
         let currentHr3ClaimsBreakdown = null;
         let currentReport = null;
 
+        function isLegacyHr3Alert(alert) {
+            const department = String(alert?.department || alert?.department_code || '').toLowerCase().replace(/[\s_-]/g, '');
+            return department === 'hr3';
+        }
+
         // Initialize sidebar state on page load
         document.addEventListener('DOMContentLoaded', function() {
             const sidebar = document.getElementById('sidebar');
@@ -3058,7 +3063,7 @@ if ($budgetRequestedByName === '') {
                     throw new Error(data.error);
                 }
 
-                currentAlerts = data.alerts || [];
+                currentAlerts = (data.alerts || []).filter(alert => !isLegacyHr3Alert(alert));
                 renderAlertsTable();
                 updateAlertsCards();
                 updateBudgetOverview();
