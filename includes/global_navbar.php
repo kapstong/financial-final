@@ -57,6 +57,12 @@ $privacyModeEnabled = privacyModeEnabled();
         letter-spacing: 0.35rem;
         text-align: center;
     }
+    #privacyOtpModal {
+        z-index: 2147483001 !important;
+    }
+    .modal-backdrop.privacy-otp-backdrop {
+        z-index: 2147483000 !important;
+    }
 </style>
 <nav class="navbar navbar-expand-lg navbar-light bg-white mb-4 shadow-sm">
     <div class="container-fluid">
@@ -255,6 +261,21 @@ $privacyModeEnabled = privacyModeEnabled();
             error.style.setProperty('display', message ? 'block' : 'none', 'important');
         }
 
+        function prepareOtpModal() {
+            const modalEl = document.getElementById('privacyOtpModal');
+            if (!modalEl) return null;
+            if (modalEl.parentElement !== document.body) {
+                document.body.appendChild(modalEl);
+            }
+            return modalEl;
+        }
+
+        function markOtpBackdrop() {
+            const backdrops = document.querySelectorAll('.modal-backdrop');
+            const backdrop = backdrops[backdrops.length - 1];
+            backdrop?.classList.add('privacy-otp-backdrop');
+        }
+
         async function sendOtp() {
             const resendButton = document.getElementById('privacyOtpResendButton');
             if (resendButton) resendButton.disabled = true;
@@ -301,11 +322,12 @@ $privacyModeEnabled = privacyModeEnabled();
                 return;
             }
 
-            const modalEl = document.getElementById('privacyOtpModal');
+            const modalEl = prepareOtpModal();
             if (modalEl && window.bootstrap?.Modal) {
                 document.getElementById('privacyOtpCode').value = '';
                 showOtpError('');
                 bootstrap.Modal.getOrCreateInstance(modalEl).show();
+                window.setTimeout(markOtpBackdrop, 0);
                 if (await sendOtp()) {
                     document.getElementById('privacyOtpCode')?.focus();
                 }
@@ -335,6 +357,7 @@ $privacyModeEnabled = privacyModeEnabled();
             document.getElementById('privacyEyeButton')?.addEventListener('click', function() {
                 handleToggle().catch(error => alert(error.message));
             });
+            prepareOtpModal();
             document.getElementById('privacyOtpVerifyButton')?.addEventListener('click', revealWithOtp);
             document.getElementById('privacyOtpResendButton')?.addEventListener('click', sendOtp);
             document.getElementById('privacyOtpCode')?.addEventListener('input', function() {
