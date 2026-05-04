@@ -231,8 +231,9 @@ body.atiera-loading-active .sidebar-toggle {
         "Reconciling financial records...",
         "Opening selected module..."
     ];
-    const MINIMUM_VISIBLE_MS = 1700;
-    const LOADER_FALLBACK_HIDE_MS = 3200;
+    const MINIMUM_VISIBLE_MIN_MS = 3000;
+    const MINIMUM_VISIBLE_MAX_MS = 5000;
+    const LOADER_HARD_HIDE_MS = 5800;
 
     let progressTimer = null;
     let statusTimer = null;
@@ -241,6 +242,7 @@ body.atiera-loading-active .sidebar-toggle {
     let progress = 12;
     let visible = false;
     let shownAt = 0;
+    let minimumVisibleMs = MINIMUM_VISIBLE_MIN_MS;
     let phase = 0;
 
     function setLoadingUiState(isActive) {
@@ -297,6 +299,8 @@ body.atiera-loading-active .sidebar-toggle {
         visible = true;
         clearTimers();
         shownAt = Date.now();
+        minimumVisibleMs = MINIMUM_VISIBLE_MIN_MS
+            + Math.floor(Math.random() * (MINIMUM_VISIBLE_MAX_MS - MINIMUM_VISIBLE_MIN_MS + 1));
         progress = 12;
         phase = 0;
         statusLabel.textContent = customStatus || statusSteps[phase];
@@ -308,9 +312,9 @@ body.atiera-loading-active .sidebar-toggle {
 
         fallbackTimer = window.setTimeout(function () {
             if (document.visibilityState === "visible") {
-                hideLoader();
+                hideLoader(true);
             }
-        }, LOADER_FALLBACK_HIDE_MS);
+        }, Math.min(minimumVisibleMs + 800, LOADER_HARD_HIDE_MS));
     }
 
     function hideLoader(force) {
@@ -319,7 +323,7 @@ body.atiera-loading-active .sidebar-toggle {
         }
         if (!force) {
             const elapsed = Date.now() - shownAt;
-            const remaining = MINIMUM_VISIBLE_MS - elapsed;
+            const remaining = minimumVisibleMs - elapsed;
             if (remaining > 0) {
                 if (!hideTimer) {
                     hideTimer = window.setTimeout(function () {
@@ -413,7 +417,7 @@ body.atiera-loading-active .sidebar-toggle {
     window.setTimeout(hideLoader, 900);
     window.setTimeout(function () {
         hideLoader(true);
-    }, LOADER_FALLBACK_HIDE_MS);
+    }, LOADER_HARD_HIDE_MS);
 
     window.addEventListener("DOMContentLoaded", hideLoader);
     window.addEventListener("load", function () {
