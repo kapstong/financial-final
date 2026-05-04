@@ -4,6 +4,7 @@ require_once __DIR__ . '/permissions.php';
 require_once __DIR__ . '/logger.php';
 require_once __DIR__ . '/csrf.php';
 require_once __DIR__ . '/maintenance_mode.php';
+require_once __DIR__ . '/privacy.php';
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
@@ -34,6 +35,7 @@ $isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP
 
 if (!empty($_SESSION['user']['id'])) {
     enforceMaintenanceModeForRequest();
+    privacyBlockRestrictedOutputIfNeeded();
 }
 
 // Enforce folder-level role boundaries for authenticated web requests.

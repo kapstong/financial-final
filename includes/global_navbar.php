@@ -63,6 +63,10 @@ $privacyModeEnabled = privacyModeEnabled();
     .modal-backdrop.privacy-otp-backdrop {
         z-index: 2147483000 !important;
     }
+    .privacy-output-disabled {
+        opacity: 0.55 !important;
+        cursor: not-allowed !important;
+    }
 </style>
 <nav class="navbar navbar-expand-lg navbar-light bg-white mb-4 shadow-sm">
     <div class="container-fluid">
@@ -153,6 +157,14 @@ $privacyModeEnabled = privacyModeEnabled();
         let privacyMode = <?php echo $privacyModeEnabled ? 'true' : 'false'; ?>;
         let applyingPrivacy = false;
         let observer = null;
+        const restrictedOutputPattern = /\b(export|download|print|generate\s+report|email\s+report)\b/i;
+        const restrictedInlinePattern = /\b(export|download|print|generate[A-Za-z0-9_]*Report|window\.print|emailCurrentReport|downloadCSV)\b/i;
+        const unrestrictedIds = new Set([
+            'privacyEyeButton',
+            'privacyOtpCode',
+            'privacyOtpResendButton',
+            'privacyOtpVerifyButton'
+        ]);
 
         function maskMoney(value) {
             return String(value).replace(/[\d,.]/g, '*');
@@ -167,6 +179,77 @@ $privacyModeEnabled = privacyModeEnabled();
             icon.classList.toggle('fa-eye', !privacyMode);
             button.title = privacyMode ? 'Privacy Mode On - verify to show amounts' : 'Privacy Mode Off - hide amounts';
             button.setAttribute('aria-label', button.title);
+        }
+
+        function showPrivacyBlockedNotice() {
+            const message = 'Privacy mode is ON. Disable privacy mode with OTP verification before exporting, downloading, printing, or generating reports.';
+            if (typeof window.showAlert === 'function') {
+                window.showAlert(message, 'warning');
+            } else {
+                alert(message);
+            }
+        }
+
+        function isRestrictedUrl(value) {
+            if (!value) return false;
+            let url;
+            try {
+                url = new URL(value, window.location.href);
+            } catch (error) {
+                return restrictedOutputPattern.test(String(value));
+            }
+
+            const path = url.pathname.toLowerCase();
+            const action = (url.searchParams.get('action') || '').toLowerCase();
+            const format = (url.searchParams.get('format') || '').toLowerCase();
+
+            return path.endsWith('/download.php')
+                || path.endsWith('/api/pdf.php')
+                || (path.endsWith('/api/reports.php') && (format !== '' || url.searchParams.has('type')))
+                || (path.endsWith('/api/audit.php') && action === 'export')
+                || (path.endsWith('/api/backups.php') && action === 'download')
+                || ['export', 'download'].includes(action)
+                || ['csv', 'pdf', 'excel', 'xlsx', 'xls'].includes(format)
+                || /(?:^|[?&])export=/.test(url.search);
+        }
+
+        function isRestrictedOutputElement(element) {
+            if (!element || unrestrictedIds.has(element.id)) return false;
+
+            const control = element.closest('button, a, input, select, [role="button"], .btn');
+            if (!control || unrestrictedIds.has(control.id)) return false;
+            if (control.closest('#privacyOtpModal')) return false;
+
+            const text = ((control.innerText || control.value || control.getAttribute('aria-label') || control.title || '') + '').trim();
+            const inline = control.getAttribute('onclick') || '';
+            const href = control.getAttribute('href') || '';
+            const download = control.hasAttribute('download');
+
+            return download
+                || restrictedOutputPattern.test(text)
+                || restrictedInlinePattern.test(inline)
+                || isRestrictedUrl(href);
+        }
+
+        function enforcePrivacyOutputUi(root) {
+            if (!privacyMode || !root || root.nodeType !== Node.ELEMENT_NODE) return;
+            const candidates = root.matches?.('button, a, input, [role="button"], .btn')
+                ? [root]
+                : Array.from(root.querySelectorAll?.('button, a, input, [role="button"], .btn') || []);
+
+            candidates.forEach(function(control) {
+                if (!isRestrictedOutputElement(control)) return;
+                control.classList.add('privacy-output-disabled');
+                control.setAttribute('aria-disabled', 'true');
+                control.title = privacyRestrictedTitle();
+                if (control.tagName === 'BUTTON' || (control.tagName === 'INPUT' && ['button', 'submit'].includes((control.type || '').toLowerCase()))) {
+                    control.disabled = true;
+                }
+            });
+        }
+
+        function privacyRestrictedTitle() {
+            return 'Disable privacy mode before exporting, downloading, printing, or generating reports.';
         }
 
         function shouldSkipNode(node) {
@@ -210,6 +293,7 @@ $privacyModeEnabled = privacyModeEnabled();
                 if (root.nodeType === Node.TEXT_NODE) {
                     wrapTextNode(root);
                 } else if (root.nodeType === Node.ELEMENT_NODE || root.nodeType === Node.DOCUMENT_NODE) {
+                    enforcePrivacyOutputUi(root === document ? document.body : root);
                     if (privacyMode) {
                         root.querySelectorAll?.('.privacy-money').forEach(function(el) {
                             el.removeAttribute('data-privacy-value');
@@ -353,6 +437,42 @@ $privacyModeEnabled = privacyModeEnabled();
         document.addEventListener('DOMContentLoaded', function() {
             updateButton();
             scanMoney(document.body);
+            if (privacyMode) {
+                document.addEventListener('click', function(event) {
+                    if (!isRestrictedOutputElement(event.target)) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    event.stopImmediatePropagation();
+                    showPrivacyBlockedNotice();
+                }, true);
+
+                document.addEventListener('submit', function(event) {
+                    const form = event.target;
+                    if (!(form instanceof HTMLFormElement)) return;
+                    const action = form.getAttribute('action') || '';
+                    const formText = form.innerText || '';
+                    if (!isRestrictedUrl(action) && !restrictedOutputPattern.test(formText)) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    event.stopImmediatePropagation();
+                    showPrivacyBlockedNotice();
+                }, true);
+
+                const originalOpen = window.open;
+                window.open = function(url) {
+                    if (isRestrictedUrl(url)) {
+                        showPrivacyBlockedNotice();
+                        return null;
+                    }
+                    return originalOpen.apply(window, arguments);
+                };
+
+                const originalPrint = window.print;
+                window.print = function() {
+                    showPrivacyBlockedNotice();
+                    return undefined;
+                };
+            }
             observer = new MutationObserver(function(mutations) {
                 if (applyingPrivacy) return;
                 mutations.forEach(function(mutation) {
