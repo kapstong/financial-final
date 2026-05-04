@@ -33,19 +33,28 @@ define('ATIERA_LOADING_SCREEN_INCLUDED', true);
     pointer-events: none;
 }
 
+html.atiera-loading-active .sidebar,
+body.atiera-loading-active .sidebar,
+html.atiera-loading-active .sidebar-toggle,
+body.atiera-loading-active .sidebar-toggle {
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
+
 .atiera-transition-loader * {
     box-sizing: border-box;
 }
 
 .atiera-loader-shell {
-    width: min(92vw, 380px);
-    border-radius: 18px;
+    width: min(92vw, 520px);
+    border-radius: 22px;
     background: linear-gradient(155deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.03));
     border: 1px solid rgba(243, 214, 127, 0.35);
     box-shadow:
         0 24px 50px rgba(5, 8, 20, 0.55),
         inset 0 1px 0 rgba(255, 255, 255, 0.12);
-    padding: 24px 22px 18px;
+    padding: 34px 32px 26px;
     text-align: center;
     color: var(--atiera-text);
     position: relative;
@@ -64,23 +73,23 @@ define('ATIERA_LOADING_SCREEN_INCLUDED', true);
 
 .atiera-loader-brand {
     margin: 0;
-    letter-spacing: 0.24em;
+    letter-spacing: 0.28em;
     font-weight: 700;
-    font-size: 0.85rem;
+    font-size: 1rem;
     color: var(--atiera-gold-300);
     text-shadow: 0 0 14px rgba(212, 175, 55, 0.38);
 }
 
 .atiera-loader-title {
-    margin: 6px 0 16px;
-    font-size: 1rem;
+    margin: 8px 0 24px;
+    font-size: 1.2rem;
     font-weight: 600;
     color: #f8fbff;
 }
 
 .atiera-loader-orbit {
-    width: 92px;
-    height: 92px;
+    width: 132px;
+    height: 132px;
     border-radius: 999px;
     margin: 0 auto;
     position: relative;
@@ -98,24 +107,24 @@ define('ATIERA_LOADING_SCREEN_INCLUDED', true);
 }
 
 .atiera-loader-orbit::before {
-    inset: -8px;
-    border: 2px solid transparent;
+    inset: -10px;
+    border: 3px solid transparent;
     border-top-color: rgba(243, 214, 127, 0.95);
     border-right-color: rgba(243, 214, 127, 0.4);
     animation: atieraLoaderSpin 900ms linear infinite;
 }
 
 .atiera-loader-orbit::after {
-    inset: 8px;
-    border: 2px solid transparent;
+    inset: 12px;
+    border: 3px solid transparent;
     border-bottom-color: rgba(115, 156, 255, 0.78);
     border-left-color: rgba(115, 156, 255, 0.35);
     animation: atieraLoaderSpinReverse 1200ms linear infinite;
 }
 
 .atiera-loader-core {
-    width: 42px;
-    height: 42px;
+    width: 62px;
+    height: 62px;
     border-radius: 999px;
     background:
         radial-gradient(circle at 34% 28%, #fff1c3 0%, #e7c763 40%, #d4af37 75%, #a37719 100%);
@@ -127,15 +136,15 @@ define('ATIERA_LOADING_SCREEN_INCLUDED', true);
 }
 
 .atiera-loader-status {
-    margin: 14px 0 10px;
+    margin: 22px 0 12px;
     min-height: 1.3em;
-    font-size: 0.92rem;
+    font-size: 1.02rem;
     color: rgba(237, 242, 251, 0.95);
 }
 
 .atiera-loader-progress-track {
     width: 100%;
-    height: 7px;
+    height: 9px;
     border-radius: 999px;
     background: rgba(10, 17, 36, 0.55);
     border: 1px solid rgba(243, 214, 127, 0.24);
@@ -153,8 +162,8 @@ define('ATIERA_LOADING_SCREEN_INCLUDED', true);
 }
 
 .atiera-loader-progress-label {
-    margin-top: 8px;
-    font-size: 0.8rem;
+    margin-top: 10px;
+    font-size: 0.88rem;
     letter-spacing: 0.09em;
     color: rgba(243, 214, 127, 0.96);
     font-variant-numeric: tabular-nums;
@@ -223,7 +232,7 @@ define('ATIERA_LOADING_SCREEN_INCLUDED', true);
         "Opening selected module..."
     ];
     const LINK_NAVIGATION_DELAY_MS = 1800;
-    const LOADER_FALLBACK_HIDE_MS = 6200;
+    const LOADER_FALLBACK_HIDE_MS = 1800;
 
     let progressTimer = null;
     let statusTimer = null;
