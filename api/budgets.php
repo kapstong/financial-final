@@ -637,18 +637,56 @@ function runRandomForestForecast(array $history, int $predictMonths) {
     @unlink($csvPath);
 
     if (($result['exit_code'] ?? -1) !== 0) {
-        return [
-            'error' => 'Random Forest forecast failed',
-            'details' => trim((string)($result['stderr'] ?? $result['stdout'] ?? ''))
-        ];
+        $fallback = buildPhpForecastFallback($history, $predictMonths);
+        $fallback['details']['python_error'] = trim((string)($result['stderr'] ?? $result['stdout'] ?? ''));
+        return $fallback;
     }
 
     $payload = json_decode((string)$result['stdout'], true);
     if (!is_array($payload)) {
-        return ['error' => 'Random Forest forecast returned invalid JSON'];
+        $fallback = buildPhpForecastFallback($history, $predictMonths);
+        $fallback['details']['python_error'] = 'Random Forest forecast returned invalid JSON';
+        return $fallback;
     }
 
     return $payload;
+}
+
+function buildPhpForecastFallback(array $history, int $predictMonths) {
+    $values = array_map(function ($item) {
+        return (float)($item['value'] ?? 0);
+    }, $history);
+
+    $lastHistory = end($history);
+    $lastDateValue = $lastHistory['date'] ?? date('Y-m-01');
+    $lastDate = new DateTimeImmutable(date('Y-m-01', strtotime($lastDateValue)));
+    $lastValue = count($values) ? (float)end($values) : 0.0;
+
+    $growthRates = [];
+    for ($i = 1; $i < count($values); $i++) {
+        $previous = (float)$values[$i - 1];
+        $growthRates[] = $previous == 0.0 ? 0.0 : (((float)$values[$i] - $previous) / $previous);
+    }
+    $averageGrowth = count($growthRates) ? array_sum($growthRates) / count($growthRates) : 0.0;
+
+    $forecast = [];
+    for ($i = 1; $i <= $predictMonths; $i++) {
+        $lastValue = max(0.0, $lastValue * (1 + $averageGrowth));
+        $forecast[] = [
+            'date' => $lastDate->modify('+' . $i . ' months')->format('Y-m-01'),
+            'value' => round($lastValue, 2)
+        ];
+    }
+
+    return [
+        'method' => 'php_avg_growth_fallback',
+        'forecast' => $forecast,
+        'details' => [
+            'estimator' => 'PHP average growth fallback',
+            'average_monthly_growth' => $averageGrowth,
+            'training_rows' => count($history)
+        ]
+    ];
 }
 
 function buildMonthlyHistory(array $rows, $months) {
