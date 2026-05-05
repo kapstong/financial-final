@@ -892,7 +892,7 @@ if ($budgetRequestedByName === '') {
                     <i class="fas fa-exclamation-triangle me-2"></i>Budget Alerts
                 </button>
             </li>
-            
+
             <li class="nav-item" role="presentation">
                 <button class="nav-link" id="adjustments-tab" data-bs-toggle="tab" data-bs-target="#adjustments" type="button" role="tab">
                     <i class="fas fa-sliders-h me-2"></i>Budget Adjustments
@@ -1454,7 +1454,8 @@ if ($budgetRequestedByName === '') {
             </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="../includes/alert-modal.js"></script>
+
+    <script src="../includes/document_exporter.js?v=1"></script>
     <script>
         function toggleSidebar() {
             document.getElementById('sidebar').classList.toggle('show');
@@ -1946,7 +1947,7 @@ if ($budgetRequestedByName === '') {
             }
         }
 
-        
+
           async function loadClaimsData() {
             const trackingBody = document.getElementById('claimsBudgetBody');
             const alertsBody = document.getElementById('claimsOverBudgetBody');
@@ -3362,15 +3363,11 @@ if ($budgetRequestedByName === '') {
                 }).join(','))
             ].join('\n');
 
-            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = currentReport.title.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '.csv';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
+            DocumentExporter.downloadTextReport(
+                `${currentReport.title}\n\n${csv}`,
+                currentReport.title.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '.xls',
+                currentReport.title
+            );
         }
 
         function generateBudgetVsActualReport() {

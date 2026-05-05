@@ -14,7 +14,7 @@ require_once '../includes/database.php';
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        
+
         .sidebar .nav-item {
             position: relative;
         }
@@ -642,7 +642,7 @@ require_once '../includes/database.php';
                             <option value="annually">Annually</option>
                             <option value="custom">Custom Range</option>
                         </select>
-                        <button class="btn btn-outline-secondary me-2" onclick="exportIncomeStatement('csv')" title="Export as CSV"><i class="fas fa-file-csv me-2"></i>Export CSV</button>
+                        <button class="btn btn-outline-secondary me-2" onclick="exportIncomeStatement('csv')" title="Export as formatted Excel workbook"><i class="fas fa-file-excel me-2"></i>Export Excel</button>
                         <button class="btn btn-outline-secondary me-2" onclick="exportIncomeStatement('pdf')" title="Export as PDF"><i class="fas fa-file-pdf me-2"></i>Export PDF</button>
                         <button class="btn btn-primary" onclick="generateIncomeStatement()"><i class="fas fa-sync me-2"></i>Generate Report</button>
                     </div>
@@ -698,7 +698,7 @@ require_once '../includes/database.php';
                             <option value="annually">Annually</option>
                             <option value="custom">Custom Range</option>
                         </select>
-                        <button class="btn btn-outline-secondary me-2" onclick="exportBalanceSheet('csv')" title="Export as CSV"><i class="fas fa-file-csv me-2"></i>Export CSV</button>
+                        <button class="btn btn-outline-secondary me-2" onclick="exportBalanceSheet('csv')" title="Export as formatted Excel workbook"><i class="fas fa-file-excel me-2"></i>Export Excel</button>
                         <button class="btn btn-outline-secondary me-2" onclick="exportBalanceSheet('pdf')" title="Export as PDF"><i class="fas fa-file-pdf me-2"></i>Export PDF</button>
                         <button class="btn btn-primary" onclick="generateBalanceSheet()"><i class="fas fa-sync me-2"></i>Generate Report</button>
                     </div>
@@ -754,7 +754,7 @@ require_once '../includes/database.php';
                             <option value="annually">Annually</option>
                             <option value="custom">Custom Range</option>
                         </select>
-                        <button class="btn btn-outline-secondary me-2" onclick="exportCashFlow('csv')" title="Export as CSV"><i class="fas fa-file-csv me-2"></i>Export CSV</button>
+                        <button class="btn btn-outline-secondary me-2" onclick="exportCashFlow('csv')" title="Export as formatted Excel workbook"><i class="fas fa-file-excel me-2"></i>Export Excel</button>
                         <button class="btn btn-outline-secondary me-2" onclick="exportCashFlow('pdf')" title="Export as PDF"><i class="fas fa-file-pdf me-2"></i>Export PDF</button>
                         <button class="btn btn-primary" onclick="generateCashFlow()"><i class="fas fa-sync me-2"></i>Generate Report</button>
                     </div>
@@ -803,7 +803,8 @@ require_once '../includes/database.php';
     <!-- Footer -->
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="../includes/alert-modal.js"></script>
+
+    <script src="../includes/document_exporter.js?v=1"></script>
     <script>
         function toggleSidebar() {
             document.getElementById('sidebar').classList.toggle('show');
@@ -1092,7 +1093,7 @@ require_once '../includes/database.php';
         // Export income statement
         function exportIncomeStatement(format) {
             format = format || 'csv'; // default to CSV
-            
+
             if (!currentIncomeStatementData) {
                 showAlert('Please generate the report first', 'warning');
                 return;
@@ -1103,7 +1104,7 @@ require_once '../includes/database.php';
                 const dateFrom = currentIncomeStatementData.date_from;
                 const dateTo = currentIncomeStatementData.date_to;
                 const url = `../api/reports.php?type=income_statement&date_from=${dateFrom}&date_to=${dateTo}&format=pdf`;
-                
+
                 // Create and trigger download
                 const link = document.createElement('a');
                 link.href = url;
@@ -1111,7 +1112,7 @@ require_once '../includes/database.php';
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
-                
+
                 showAlert('Income statement PDF download started', 'success');
                 return;
             }
@@ -1141,14 +1142,8 @@ require_once '../includes/database.php';
 
             csvContent += `"Net Profit","${currentIncomeStatementData.net_profit}"\n`;
 
-            // Download CSV
-            const encodedUri = encodeURI(csvContent);
-            const link = document.createElement('a');
-            link.setAttribute('href', encodedUri);
-            link.setAttribute('download', `income_statement_${currentIncomeStatementData.date_from}_to_${currentIncomeStatementData.date_to}.csv`);
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+            // Download formatted workbook
+            DocumentExporter.downloadTextReport(csvContent, `income_statement_${currentIncomeStatementData.date_from}_to_${currentIncomeStatementData.date_to}.xls`, 'Profit & Loss Statement');
 
             showAlert('Income statement exported successfully', 'success');
         }
@@ -1875,7 +1870,7 @@ require_once '../includes/database.php';
         // Export functions
         function exportBalanceSheet(format) {
             format = format || 'csv'; // default to CSV
-            
+
             if (!currentBalanceSheetData) {
                 showAlert('Please generate the balance sheet first', 'warning');
                 return;
@@ -1886,7 +1881,7 @@ require_once '../includes/database.php';
                 const dateFrom = currentBalanceSheetData.date_from;
                 const dateTo = currentBalanceSheetData.as_of_date;
                 const url = `../api/reports.php?type=balance_sheet&date_from=${dateFrom}&date_to=${dateTo}&format=pdf`;
-                
+
                 // Create and trigger download
                 const link = document.createElement('a');
                 link.href = url;
@@ -1894,7 +1889,7 @@ require_once '../includes/database.php';
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
-                
+
                 showAlert('Balance Sheet PDF download started', 'success');
                 return;
             }
@@ -1936,21 +1931,15 @@ require_once '../includes/database.php';
 
             csvContent += `"Total Liabilities & Equity","${currentBalanceSheetData.liabilities.total + currentBalanceSheetData.equity.total}"\n`;
 
-            // Download CSV
-            const encodedUri = encodeURI(csvContent);
-            const link = document.createElement('a');
-            link.setAttribute('href', encodedUri);
-            link.setAttribute('download', `balance_sheet_${currentBalanceSheetData.as_of_date}.csv`);
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+            // Download formatted workbook
+            DocumentExporter.downloadTextReport(csvContent, `balance_sheet_${currentBalanceSheetData.as_of_date}.xls`, 'Balance Sheet');
 
             showAlert('Balance sheet exported successfully', 'success');
         }
 
         function exportCashFlow(format) {
             format = format || 'csv'; // default to CSV
-            
+
             if (!currentCashFlowData) {
                 showAlert('Please generate the cash flow statement first', 'warning');
                 return;
@@ -1961,7 +1950,7 @@ require_once '../includes/database.php';
                 const dateFrom = currentCashFlowData.start_date;
                 const dateTo = currentCashFlowData.end_date;
                 const url = `../api/reports.php?type=cash_flow&date_from=${dateFrom}&date_to=${dateTo}&format=pdf`;
-                
+
                 // Create and trigger download
                 const link = document.createElement('a');
                 link.href = url;
@@ -1969,7 +1958,7 @@ require_once '../includes/database.php';
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
-                
+
                 showAlert('Cash Flow PDF download started', 'success');
                 return;
             }
@@ -2035,21 +2024,15 @@ require_once '../includes/database.php';
 
             csvContent += `"Net Change in Cash","${currentCashFlowData.net_cash_flow}"\n`;
 
-            // Download CSV
-            const encodedUri = encodeURI(csvContent);
-            const link = document.createElement('a');
-            link.setAttribute('href', encodedUri);
-            link.setAttribute('download', `cash_flow_${currentCashFlowData.start_date}_to_${currentCashFlowData.end_date}.csv`);
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+            // Download formatted workbook
+            DocumentExporter.downloadTextReport(csvContent, `cash_flow_${currentCashFlowData.start_date}_to_${currentCashFlowData.end_date}.xls`, 'Cash Flow Statement');
 
             showAlert('Cash flow statement exported successfully', 'success');
         }
 
         // Export all reports at once
         function exportAllReports() {
-            const format = 'csv';
+            const format = 'excel';
             let exportCount = 0;
 
             // Export Income Statement if available
@@ -2102,7 +2085,7 @@ require_once '../includes/database.php';
             }
         }
 
-        // Export current active tab report as Excel (CSV format)
+        // Export current active tab report as formatted Excel workbook
         function exportCurrentReportExcel() {
             const activeTab = document.querySelector('.nav-link.active');
             if (!activeTab) {
@@ -2968,15 +2951,7 @@ require_once '../includes/database.php';
                     headers.join(','),
                     ...rows.map(row => row.map(value => `"${String(value ?? '').replace(/"/g, '""')}"`).join(','))
                 ].join('\n');
-                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = filename;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(url);
+                DocumentExporter.downloadTextReport(csv, filename.replace(/\.csv$/i, '.xls'), filename.replace(/[_-]/g, ' ').replace(/\.csv$/i, ''));
             }
 
             window.generateIncomeStatement = async function() {

@@ -1023,7 +1023,8 @@ body {
 
     <!-- Process Payment Modal -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="../includes/alert-modal.js"></script>
+
+    <script src="../includes/document_exporter.js?v=1"></script>
     <script src="disbursements-js.php"></script>
     <!-- Helper functions that need to be available immediately - defined at global scope -->
     <script>
@@ -1249,8 +1250,8 @@ body {
             sortedClaims.forEach(claim => {
                 const amount = parseFloat(claim.total_amount || claim.amount || 0);
                 const status = claim.status || 'Pending';
-                const statusBadge = status === 'Approved' 
-                    ? '<span class="badge bg-success">Approved</span>' 
+                const statusBadge = status === 'Approved'
+                    ? '<span class="badge bg-success">Approved</span>'
                     : '<span class="badge bg-warning text-dark">' + status + '</span>';
 
                 const row = document.createElement('tr');
@@ -1323,7 +1324,7 @@ body {
                             })
                         })
                     });
-                    
+
                     const auditResult = await auditResponse.json();
                     if (!auditResult.success) {
                         console.warn('HR3 claim audit logging returned:', auditResult);
@@ -1633,7 +1634,7 @@ body {
                 row.dataset.submittedBy = payroll.submitted_by || '';
                 row.dataset.employeeCount = payroll.employee_count || '';
                 let actionsHtml = '';
-                
+
                 // Show approve/reject buttons only for payroll that can be approved
                 if (canApprove) {
                     actionsHtml = `
@@ -1652,7 +1653,7 @@ body {
                         </button>
                     `;
                 }
-                
+
                 row.innerHTML = `
                     <td><strong>${payroll.period_display || payroll.payroll_period || 'N/A'}</strong></td>
                     <td><strong class="text-success">PHP ${totalAmount.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong></td>
@@ -2354,9 +2355,10 @@ body {
                 ...row,
                 disbursement_date: row.disbursement_date || row.payment_date || '',
                 source_module: row.source_module || (
-                    String(row.reference_number || '').startsWith('HR3-CLAIM-') ? 'claims' :
-                    String(row.reference_number || '').startsWith('PAYROLL-') ? 'payroll' :
+                    String(row.reference_number || '').startsWith('HR3-CLAIM-') || String(row.reference_number || '').startsWith('REQ-CLM') ? 'claims' :
+                    String(row.reference_number || '').startsWith('PAYROLL-') || String(row.reference_number || '').startsWith('PAYROLL-PAY') ? 'payroll' :
                     String(row.reference_number || '').startsWith('INCENTIVE-') ? 'incentives' :
+                    String(row.reference_number || '').startsWith('HBG-') ? 'ap' :
                     'manual'
                 )
             };
@@ -3198,15 +3200,11 @@ body {
                 ].map(value => `"${String(value ?? '').replace(/"/g, '""')}"`).join(','))
             ].join('\n');
 
-            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `disbursement_audit_${new Date().toISOString().slice(0, 10)}.csv`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
+            DocumentExporter.downloadTextReport(
+                `Disbursement Audit Report\n\n${csv}`,
+                `disbursement_audit_${new Date().toISOString().slice(0, 10)}.xls`,
+                'Disbursement Audit Report'
+            );
             logDisbursementAudit('exported', '', { detail: 'Exported filtered disbursement audit log' }, null);
         };
 
@@ -3237,15 +3235,11 @@ body {
                 ].map(value => `"${String(value ?? '').replace(/"/g, '""')}"`).join(','))
             ].join('\n');
 
-            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `disbursements_${new Date().toISOString().slice(0, 10)}.csv`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
+            DocumentExporter.downloadTextReport(
+                `Disbursement Report\n\n${csv}`,
+                `disbursements_${new Date().toISOString().slice(0, 10)}.xls`,
+                'Disbursement Report'
+            );
             logDisbursementAudit('exported', '', { detail: 'Exported disbursement report' }, null);
         };
 

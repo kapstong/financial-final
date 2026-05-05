@@ -1273,7 +1273,8 @@ try {
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="../includes/alert-modal.js"></script>
+
+    <script src="../includes/document_exporter.js?v=1"></script>
     <script>
         // Pass customers data from PHP to JavaScript
         const phpCustomers = <?php echo json_encode($customers); ?>;
@@ -2013,7 +2014,7 @@ try {
                         }));
 
                         headers = ['Invoice #', 'Customer', 'Customer Code', 'Date', 'Due Date', 'Amount', 'Balance', 'Status', 'Days Overdue'];
-                        filename = `receivables_report_${new Date().toISOString().split('T')[0]}.csv`;
+                        filename = `receivables_report_${new Date().toISOString().split('T')[0]}.xls`;
                         break;
 
                     case 'collections':
@@ -2034,7 +2035,7 @@ try {
                             }));
 
                             headers = ['Payment #', 'Customer', 'Date', 'Amount', 'Method', 'Reference', 'Invoice'];
-                            filename = `collections_report_${new Date().toISOString().split('T')[0]}.csv`;
+                            filename = `collections_report_${new Date().toISOString().split('T')[0]}.xls`;
                         }
                         break;
 
@@ -2056,7 +2057,7 @@ try {
                             }));
 
                             headers = ['Customer', 'Customer Code', 'Current', '1-30 Days', '31-60 Days', '61-90 Days', '90+ Days', 'Total'];
-                            filename = `aging_report_${new Date().toISOString().split('T')[0]}.csv`;
+                            filename = `aging_report_${new Date().toISOString().split('T')[0]}.xls`;
                         }
                         break;
 
@@ -2072,21 +2073,11 @@ try {
                 // Generate CSV content
                 const csvContent = generateCSV(headers, data);
 
-                // Create download link
-                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                const link = document.createElement('a');
-                const url = URL.createObjectURL(blob);
-
-                link.setAttribute('href', url);
-                link.setAttribute('download', filename);
-                link.style.visibility = 'hidden';
-
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-
-                // Revoke the object URL
-                setTimeout(() => URL.revokeObjectURL(url), 100);
+                // Download formatted workbook
+                const title = type === 'aging' ? 'Accounts Receivable Aging Report'
+                    : type === 'collections' ? 'Collections Report'
+                    : 'Accounts Receivable Report';
+                DocumentExporter.downloadTextReport(csvContent, filename, title);
 
                 showAlert(`${type.charAt(0).toUpperCase() + type.slice(1)} report exported successfully!`, 'success');
 

@@ -714,7 +714,7 @@ $db = Database::getInstance()->getConnection();
                             <option value="annually">Annually</option>
                             <option value="custom">Custom Range</option>
                         </select>
-                        <button class="btn btn-outline-secondary me-2" onclick="exportIncomeStatement('csv')" title="Export as CSV"><i class="fas fa-file-csv me-2"></i>Export CSV</button>
+                        <button class="btn btn-outline-secondary me-2" onclick="exportIncomeStatement('csv')" title="Export as formatted Excel workbook"><i class="fas fa-file-excel me-2"></i>Export Excel</button>
                         <button class="btn btn-outline-secondary me-2" onclick="exportIncomeStatement('pdf')" title="Export as PDF"><i class="fas fa-file-pdf me-2"></i>Export PDF</button>
                         <button class="btn btn-primary" onclick="generateIncomeStatement()"><i class="fas fa-sync me-2"></i>Generate Report</button>
                     </div>
@@ -770,7 +770,7 @@ $db = Database::getInstance()->getConnection();
                             <option value="annually">Annually</option>
                             <option value="custom">Custom Range</option>
                         </select>
-                        
+
                         <div id="balanceCustomRange" class="card mb-3" style="display: none; margin-top:10px;">
                             <div class="card-body p-3">
                                 <div class="row g-2 align-items-end">
@@ -789,7 +789,7 @@ $db = Database::getInstance()->getConnection();
                                 </div>
                             </div>
                         </div>
-                        <button class="btn btn-outline-secondary me-2" onclick="exportBalanceSheet('csv')" title="Export as CSV"><i class="fas fa-file-csv me-2"></i>Export CSV</button>
+                        <button class="btn btn-outline-secondary me-2" onclick="exportBalanceSheet('csv')" title="Export as formatted Excel workbook"><i class="fas fa-file-excel me-2"></i>Export Excel</button>
                         <button class="btn btn-outline-secondary me-2" onclick="exportBalanceSheet('pdf')" title="Export as PDF"><i class="fas fa-file-pdf me-2"></i>Export PDF</button>
                         <button class="btn btn-primary" onclick="generateBalanceSheet()"><i class="fas fa-sync me-2"></i>Generate Report</button>
                     </div>
@@ -843,7 +843,7 @@ $db = Database::getInstance()->getConnection();
                                 </div>
                             </div>
                         </div>
-                        <button class="btn btn-outline-secondary me-2" onclick="exportCashFlow('csv')" title="Export as CSV"><i class="fas fa-file-csv me-2"></i>Export CSV</button>
+                        <button class="btn btn-outline-secondary me-2" onclick="exportCashFlow('csv')" title="Export as formatted Excel workbook"><i class="fas fa-file-excel me-2"></i>Export Excel</button>
                         <button class="btn btn-outline-secondary me-2" onclick="exportCashFlow('pdf')" title="Export as PDF"><i class="fas fa-file-pdf me-2"></i>Export PDF</button>
                         <button class="btn btn-primary" onclick="generateCashFlow()"><i class="fas fa-sync me-2"></i>Generate Report</button>
                     </div>
@@ -871,7 +871,8 @@ $db = Database::getInstance()->getConnection();
     <!-- Footer -->
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="../includes/alert-modal.js"></script>
+
+    <script src="../includes/document_exporter.js?v=1"></script>
     <script>
         function toggleSidebar() {
             document.getElementById('sidebar').classList.toggle('show');
@@ -1150,40 +1151,40 @@ $db = Database::getInstance()->getConnection();
         // Helper function to clean export values by removing currency symbols
         function cleanExportValue(value) {
             if (value === null || value === undefined || value === '') return '';
-            
+
             const stringVal = String(value);
-            
+
             // Remove currency symbols (₱, $, PHP, etc)
             let cleaned = stringVal
                 .replace(/₱/g, '')
                 .replace(/PHP\s?/gi, '')
                 .replace(/\$/g, '')
                 .trim();
-            
+
             // If it looks like a number, return just the number without commas
             if (/^[\d,.\s-%()]+$/.test(cleaned)) {
                 // Remove commas and spaces, keep the number as-is
                 cleaned = cleaned.replace(/,/g, '').trim();
-                
+
                 // If it's a percentage, keep the % sign
                 if (cleaned.endsWith('%')) {
                     return cleaned;
                 }
-                
+
                 // Try to parse as number to validate
                 const num = parseFloat(cleaned);
                 if (!isNaN(num)) {
                     return num.toString();
                 }
             }
-            
+
             return cleaned;
         }
 
         // Export income statement
         function exportIncomeStatement(format) {
             format = format || 'csv'; // default to CSV
-            
+
             if (!currentIncomeStatementData) {
                 showAlert('Please generate the report first', 'warning');
                 return;
@@ -1194,7 +1195,7 @@ $db = Database::getInstance()->getConnection();
                 const dateFrom = currentIncomeStatementData.date_from;
                 const dateTo = currentIncomeStatementData.date_to;
                 const url = `../api/reports.php?type=income_statement&date_from=${dateFrom}&date_to=${dateTo}&format=pdf`;
-                
+
                 // Create and trigger download
                 const link = document.createElement('a');
                 link.href = url;
@@ -1202,7 +1203,7 @@ $db = Database::getInstance()->getConnection();
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
-                
+
                 showAlert('Income statement PDF download started', 'success');
                 return;
             }
@@ -1232,14 +1233,8 @@ $db = Database::getInstance()->getConnection();
 
             csvContent += `"Net Profit","${cleanExportValue(currentIncomeStatementData.net_profit)}"\n`;
 
-            // Download CSV
-            const encodedUri = encodeURI(csvContent);
-            const link = document.createElement('a');
-            link.setAttribute('href', encodedUri);
-            link.setAttribute('download', `income_statement_${currentIncomeStatementData.date_from}_to_${currentIncomeStatementData.date_to}.csv`);
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+            // Download formatted workbook
+            DocumentExporter.downloadTextReport(csvContent, `income_statement_${currentIncomeStatementData.date_from}_to_${currentIncomeStatementData.date_to}.xls`, 'Profit & Loss Statement');
 
             showAlert('Income statement exported successfully', 'success');
         }
@@ -1961,7 +1956,7 @@ $db = Database::getInstance()->getConnection();
         // Export functions
         function exportBalanceSheet(format) {
             format = format || 'csv'; // default to CSV
-            
+
             if (!currentBalanceSheetData) {
                 showAlert('Please generate the balance sheet first', 'warning');
                 return;
@@ -1972,7 +1967,7 @@ $db = Database::getInstance()->getConnection();
                 const dateFrom = currentBalanceSheetData.date_from;
                 const dateTo = currentBalanceSheetData.as_of_date;
                 const url = `../api/reports.php?type=balance_sheet&date_from=${dateFrom}&date_to=${dateTo}&format=pdf`;
-                
+
                 // Create and trigger download
                 const link = document.createElement('a');
                 link.href = url;
@@ -1980,7 +1975,7 @@ $db = Database::getInstance()->getConnection();
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
-                
+
                 showAlert('Balance Sheet PDF download started', 'success');
                 return;
             }
@@ -2022,21 +2017,15 @@ $db = Database::getInstance()->getConnection();
 
             csvContent += `"Total Liabilities & Equity","${cleanExportValue(currentBalanceSheetData.liabilities.total + currentBalanceSheetData.equity.total)}"\n`;
 
-            // Download CSV
-            const encodedUri = encodeURI(csvContent);
-            const link = document.createElement('a');
-            link.setAttribute('href', encodedUri);
-            link.setAttribute('download', `balance_sheet_${currentBalanceSheetData.as_of_date}.csv`);
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+            // Download formatted workbook
+            DocumentExporter.downloadTextReport(csvContent, `balance_sheet_${currentBalanceSheetData.as_of_date}.xls`, 'Balance Sheet');
 
             showAlert('Balance sheet exported successfully', 'success');
         }
 
         function exportCashFlow(format) {
             format = format || 'csv'; // default to CSV
-            
+
             if (!currentCashFlowData) {
                 showAlert('Please generate the cash flow statement first', 'warning');
                 return;
@@ -2047,7 +2036,7 @@ $db = Database::getInstance()->getConnection();
                 const dateFrom = currentCashFlowData.start_date;
                 const dateTo = currentCashFlowData.end_date;
                 const url = `../api/reports.php?type=cash_flow&date_from=${dateFrom}&date_to=${dateTo}&format=pdf`;
-                
+
                 // Create and trigger download
                 const link = document.createElement('a');
                 link.href = url;
@@ -2055,7 +2044,7 @@ $db = Database::getInstance()->getConnection();
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
-                
+
                 showAlert('Cash Flow PDF download started', 'success');
                 return;
             }
@@ -2121,14 +2110,8 @@ $db = Database::getInstance()->getConnection();
 
             csvContent += `"Net Change in Cash","${cleanExportValue(currentCashFlowData.net_cash_flow)}"\n`;
 
-            // Download CSV
-            const encodedUri = encodeURI(csvContent);
-            const link = document.createElement('a');
-            link.setAttribute('href', encodedUri);
-            link.setAttribute('download', `cash_flow_${currentCashFlowData.start_date}_to_${currentCashFlowData.end_date}.csv`);
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+            // Download formatted workbook
+            DocumentExporter.downloadTextReport(csvContent, `cash_flow_${currentCashFlowData.start_date}_to_${currentCashFlowData.end_date}.xls`, 'Cash Flow Statement');
 
             showAlert('Cash flow statement exported successfully', 'success');
         }
@@ -2138,7 +2121,7 @@ $db = Database::getInstance()->getConnection();
 
         // Export all reports at once
         function exportAllReports() {
-            const format = 'csv';
+            const format = 'excel';
             let exportCount = 0;
 
             // Export Income Statement if available
@@ -2191,7 +2174,7 @@ $db = Database::getInstance()->getConnection();
             }
         }
 
-        // Export current active tab report as Excel (CSV format)
+        // Export current active tab report as formatted Excel workbook
         function exportCurrentReportExcel() {
             const activeTab = document.querySelector('.nav-link.active');
             if (!activeTab) {

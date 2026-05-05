@@ -1264,7 +1264,8 @@ try {
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="../includes/alert-modal.js"></script>
+
+    <script src="../includes/document_exporter.js?v=1"></script>
     <script>
         function toggleSidebar() {
             document.getElementById('sidebar').classList.toggle('show');
@@ -2137,16 +2138,16 @@ try {
                 switch(type) {
                     case 'payables':
                         apiUrl = `${apiBase}bills.php`;
-                        filename = `payables_report_${new Date().toISOString().split('T')[0]}.csv`;
+                        filename = `payables_report_${new Date().toISOString().split('T')[0]}.xls`;
                         break;
                     case 'payments':
                         apiUrl = `${apiBase}payments.php?type=made`;
-                        filename = `payments_report_${new Date().toISOString().split('T')[0]}.csv`;
+                        filename = `payments_report_${new Date().toISOString().split('T')[0]}.xls`;
                         break;
                     case 'aging':
                         // Get aging data with 120+ days period to get all data
                         apiUrl = `${apiBase}bills.php?action=aging&period=120`;
-                        filename = `aging_report_${new Date().toISOString().split('T')[0]}.csv`;
+                        filename = `aging_report_${new Date().toISOString().split('T')[0]}.xls`;
                         break;
                     default:
                         throw new Error('Unknown report type');
@@ -2246,19 +2247,12 @@ try {
             return csv;
         }
 
-        // Download CSV file
+        // Download formatted workbook
         function downloadCSV(content, filename) {
-            const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement('a');
-            const url = URL.createObjectURL(blob);
-
-            link.setAttribute('href', url);
-            link.setAttribute('download', filename);
-            link.style.visibility = 'hidden';
-
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+            const title = filename.includes('aging') ? 'Accounts Payable Aging Report'
+                : filename.includes('payments') ? 'Payments Made Report'
+                : 'Accounts Payable Report';
+            DocumentExporter.downloadTextReport(content, filename, title);
         }
 
         // Utility functions

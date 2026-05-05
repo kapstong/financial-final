@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: localhost
--- Generation Time: May 04, 2026 at 12:28 PM
+-- Generation Time: May 04, 2026 at 01:05 PM
 -- Server version: 10.11.14-MariaDB-ubu2204
 -- PHP Version: 8.0.30
 
@@ -3166,7 +3166,23 @@ INSERT INTO `audit_log` (`id`, `user_id`, `action`, `table_name`, `record_id`, `
 (3990, 1, 'viewed', 'reports', NULL, NULL, '{\"path\":\"\\/superadmin\\/reports.php\"}', '2001:4451:4587:ec00:f285:d3fc:4775:fbe2', 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36', '2026-05-04 12:24:57', 0, NULL, NULL),
 (3991, 1, 'viewed', 'settings', NULL, NULL, '{\"path\":\"\\/superadmin\\/settings.php\"}', '2001:4451:4587:ec00:f285:d3fc:4775:fbe2', 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36', '2026-05-04 12:25:03', 0, NULL, NULL),
 (3992, 1, 'viewed', 'index', NULL, NULL, '{\"path\":\"\\/superadmin\\/index.php\"}', '2001:4451:4587:ec00:f285:d3fc:4775:fbe2', 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36', '2026-05-04 12:25:20', 0, NULL, NULL),
-(3993, 1, 'viewed', 'logout', NULL, NULL, '{\"path\":\"\\/logout.php\"}', '112.202.237.30', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36', '2026-05-04 12:25:42', 0, NULL, NULL);
+(3993, 1, 'viewed', 'logout', NULL, NULL, '{\"path\":\"\\/logout.php\"}', '112.202.237.30', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36', '2026-05-04 12:25:42', 0, NULL, NULL),
+(3994, 1, 'User Login', 'login_sessions', NULL, NULL, '{\"login_method\":\"password\",\"device_label\":\"Desktop \\u2022 Windows 10\",\"device_type\":\"Desktop\",\"os\":\"Windows 10\",\"browser\":\"Brave\",\"platform\":\"Windows\",\"model\":null}', '112.202.237.30', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36', '2026-05-04 12:37:00', 0, NULL, NULL),
+(3995, 1, 'viewed', 'index', NULL, NULL, '{\"path\":\"\\/superadmin\\/index.php\"}', '112.202.237.30', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36', '2026-05-04 12:37:00', 0, NULL, NULL),
+(3996, 1, 'viewed', 'disbursements', NULL, NULL, '{\"path\":\"\\/superadmin\\/disbursements.php\"}', '112.202.237.30', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36', '2026-05-04 12:37:04', 0, NULL, NULL),
+(3997, 1, 'viewed', 'budgets', NULL, NULL, '{\"path\":\"\\/superadmin\\/budget_management.php\"}', '112.202.237.30', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36', '2026-05-04 12:37:30', 0, NULL, NULL),
+(3998, 1, 'viewed', 'reports', NULL, NULL, '{\"path\":\"\\/superadmin\\/reports.php\"}', '112.202.237.30', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36', '2026-05-04 12:37:35', 0, NULL, NULL),
+(3999, 1, 'viewed', 'settings', NULL, NULL, '{\"path\":\"\\/superadmin\\/settings.php\"}', '112.202.237.30', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36', '2026-05-04 12:37:49', 0, NULL, NULL),
+(4000, 1, 'viewed', 'index', NULL, NULL, '{\"path\":\"\\/superadmin\\/index.php\"}', '112.202.237.30', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36', '2026-05-04 12:37:52', 0, NULL, NULL),
+(4001, 1, 'viewed', 'logout', NULL, NULL, '{\"path\":\"\\/logout.php\"}', '112.202.237.30', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36', '2026-05-04 12:42:14', 0, NULL, NULL),
+(4002, 1, 'User Login', 'login_sessions', NULL, NULL, '{\"login_method\":\"password\",\"device_label\":\"Desktop \\u2022 Windows 10\",\"device_type\":\"Desktop\",\"os\":\"Windows 10\",\"browser\":\"Brave\",\"platform\":\"Windows\",\"model\":null}', '112.202.237.30', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36', '2026-05-04 12:42:18', 0, NULL, NULL),
+(4003, 1, 'viewed', 'index', NULL, NULL, '{\"path\":\"\\/superadmin\\/index.php\"}', '112.202.237.30', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36', '2026-05-04 12:42:18', 0, NULL, NULL),
+(4004, 1, 'viewed', 'logout', NULL, NULL, '{\"path\":\"\\/logout.php\"}', '112.202.237.30', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36', '2026-05-04 12:46:33', 0, NULL, NULL),
+(4005, 1, 'User Login', 'login_sessions', NULL, NULL, '{\"login_method\":\"password\",\"device_label\":\"Desktop \\u2022 Windows 10\",\"device_type\":\"Desktop\",\"os\":\"Windows 10\",\"browser\":\"Brave\",\"platform\":\"Windows\",\"model\":null}', '112.202.237.30', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36', '2026-05-04 12:59:02', 0, NULL, NULL),
+(4006, 1, 'viewed', 'index', NULL, NULL, '{\"path\":\"\\/superadmin\\/index.php\"}', '112.202.237.30', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36', '2026-05-04 12:59:02', 0, NULL, NULL),
+(4007, 1, 'viewed', 'logout', NULL, NULL, '{\"path\":\"\\/logout.php\"}', '112.202.237.30', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36', '2026-05-04 13:04:03', 0, NULL, NULL),
+(4008, 1, 'User Login', 'login_sessions', NULL, NULL, '{\"login_method\":\"password\",\"device_label\":\"Desktop \\u2022 Windows 10\",\"device_type\":\"Desktop\",\"os\":\"Windows 10\",\"browser\":\"Brave\",\"platform\":\"Windows\",\"model\":null}', '112.202.237.30', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36', '2026-05-04 13:04:07', 0, NULL, NULL),
+(4009, 1, 'viewed', 'index', NULL, NULL, '{\"path\":\"\\/superadmin\\/index.php\"}', '112.202.237.30', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36', '2026-05-04 13:04:08', 0, NULL, NULL);
 
 --
 -- Triggers `audit_log`
@@ -5966,7 +5982,7 @@ CREATE TABLE `users` (
 --
 
 INSERT INTO `users` (`id`, `username`, `password_hash`, `email`, `first_name`, `last_name`, `phone`, `department`, `company_id`, `full_name`, `role`, `status`, `profile_visibility`, `activity_visibility`, `data_sharing`, `last_login`, `created_at`, `updated_at`, `deleted_at`, `require_2fa`, `last_activity`) VALUES
-(1, 'fsadmin', '$2y$10$ZyLXbqRyFE1bn4AGpU8NEu9gxn1SRYg8T.lsi0hBv.6pC4rsX2Gqu', 'catalan.jereckopaul@gmail.com', 'Jerecko Paul', 'Catalan', '09631207524', 'Finance', 1, 'System Administrator', 'super_admin', 'active', 'private', 'private', 0, '2026-05-04 20:22:45', '2025-10-24 16:54:45', '2026-05-04 12:25:42', NULL, 0, '2026-05-04 20:25:42'),
+(1, 'fsadmin', '$2y$10$ZyLXbqRyFE1bn4AGpU8NEu9gxn1SRYg8T.lsi0hBv.6pC4rsX2Gqu', 'catalan.jereckopaul@gmail.com', 'Jerecko Paul', 'Catalan', '09631207524', 'Finance', 1, 'System Administrator', 'super_admin', 'active', 'private', 'private', 0, '2026-05-04 21:04:07', '2025-10-24 16:54:45', '2026-05-04 13:04:08', NULL, 0, '2026-05-04 21:04:08'),
 (2, 'staff', '$2y$12$jTfU.T/XvbvjgG0OQ.2/quXAtFLiyFdwz0qURlac9J/69SfdIs9MG', 'staff@atiera.com', NULL, NULL, NULL, NULL, 1, 'Staff Member', 'staff', 'active', 'private', 'private', 0, '2026-02-17 15:33:26', '2025-10-24 16:54:45', '2026-02-17 07:33:35', NULL, 0, '2026-02-17 15:33:35'),
 (30, 'fstaff', '$2y$12$yxQZHhadli3O38v0i8NzEuEBmI7FbmJH/r6h/qy8kPz9kh4.Gq6Qa', 'jereckopaul90@gmail.com', 'Jopherson', 'Geolin', '', 'Finance', 1, 'Finance Staff', 'staff', 'active', 'private', 'private', 0, '2026-02-24 16:59:18', '2026-02-17 09:00:28', '2026-05-04 12:19:40', NULL, 0, '2026-02-24 17:01:39'),
 (31, 'fadmin', '$2y$12$yxQZHhadli3O38v0i8NzEuEBmI7FbmJH/r6h/qy8kPz9kh4.Gq6Qa', 'fadmin@atiera.com', 'Finance', 'Admin', NULL, 'Finance', 1, 'Finance Admin', 'admin', 'active', 'private', 'private', 0, '2026-03-01 20:46:15', '2026-02-17 09:00:28', '2026-03-01 12:50:26', NULL, 0, '2026-03-01 20:50:26');
@@ -7201,7 +7217,7 @@ ALTER TABLE `asset_depreciation_schedule`
 -- AUTO_INCREMENT for table `audit_log`
 --
 ALTER TABLE `audit_log`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3994;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4010;
 
 --
 -- AUTO_INCREMENT for table `backups`
@@ -7225,7 +7241,7 @@ ALTER TABLE `bank_accounts`
 -- AUTO_INCREMENT for table `bills`
 --
 ALTER TABLE `bills`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=209;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=228;
 
 --
 -- AUTO_INCREMENT for table `bill_items`
@@ -7327,7 +7343,7 @@ ALTER TABLE `currencies`
 -- AUTO_INCREMENT for table `customers`
 --
 ALTER TABLE `customers`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=204;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=209;
 
 --
 -- AUTO_INCREMENT for table `daily_expense_summary`
@@ -7429,7 +7445,7 @@ ALTER TABLE `integration_sync_logs`
 -- AUTO_INCREMENT for table `invoices`
 --
 ALTER TABLE `invoices`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=204;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=255;
 
 --
 -- AUTO_INCREMENT for table `invoice_items`
@@ -7513,7 +7529,7 @@ ALTER TABLE `payments_made`
 -- AUTO_INCREMENT for table `payments_received`
 --
 ALTER TABLE `payments_received`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=205;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=221;
 
 --
 -- AUTO_INCREMENT for table `permissions`
@@ -7669,7 +7685,7 @@ ALTER TABLE `user_roles`
 -- AUTO_INCREMENT for table `vendors`
 --
 ALTER TABLE `vendors`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=204;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=209;
 
 --
 -- AUTO_INCREMENT for table `workflows`

@@ -2009,7 +2009,8 @@ try {
     <!-- Footer -->
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="../includes/alert-modal.js"></script>
+
+    <script src="../includes/document_exporter.js?v=1"></script>
     <script>
         function toggleSidebar() {
             document.getElementById('sidebar').classList.toggle('show');
@@ -2142,18 +2143,12 @@ try {
                 return response.text();
             })
             .then(csvContent => {
-                // Create and download the file
-                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                const link = document.createElement('a');
-                const url = URL.createObjectURL(blob);
-
-                link.setAttribute('href', url);
-                link.setAttribute('download', `trial_balance_${trialDateTo}.csv`);
-                link.style.visibility = 'hidden';
-
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
+                // Create and download a formatted workbook
+                DocumentExporter.downloadTextReport(
+                    `Trial Balance\nPeriod: ${trialDateFrom} to ${trialDateTo}\n\n${csvContent}`,
+                    `trial_balance_${trialDateTo}.xls`,
+                    'Trial Balance'
+                );
 
                 // Show success message
                 showAlert('success', 'Trial Balance exported successfully!');

@@ -1238,7 +1238,8 @@ body {
     <!-- Footer -->
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="../includes/alert-modal.js"></script>
+
+    <script src="../includes/document_exporter.js?v=1"></script>
     <script src="../includes/forecasting.js?v=2"></script>
     <script>
         let dashboardForecastState = null;
@@ -1384,20 +1385,18 @@ body {
                 rows.push([item.date, 'forecast', item.value, '']);
             });
 
-            let csv = 'Month,Series,Total,Source Breakdown\n';
+            let csv = 'Forecast Export\n';
+            csv += `Source: ${params.get('category')} | Months: ${params.get('months')} | Target: ${params.get('forecast_date')}\n\n`;
+            csv += 'Month,Series,Total,Source Breakdown\n';
             rows.forEach(row => {
                 csv += row.map(field => `"${String(field)}"`).join(',') + '\n';
             });
 
-            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement('a');
-            const url = URL.createObjectURL(blob);
-            link.href = url;
-            link.download = `forecast_${params.get('category')}_${params.get('months')}m_${new Date().toISOString().slice(0, 10)}.csv`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
+            DocumentExporter.downloadTextReport(
+                csv,
+                `forecast_${params.get('category')}_${params.get('months')}m_${new Date().toISOString().slice(0, 10)}.xls`,
+                'Forecast Export'
+            );
         }
 
         async function loadDashboardForecast() {

@@ -323,7 +323,7 @@ try {
             ), 0) as balance
         FROM chart_of_accounts coa
         LEFT JOIN journal_entry_lines jel ON coa.id = jel.account_id
-        LEFT JOIN journal_entries je ON jel.journal_entry_id = je.id 
+        LEFT JOIN journal_entries je ON jel.journal_entry_id = je.id
             AND (je.status = 'posted' OR je.status IS NULL OR je.status = '')
             AND je.entry_date <= ?
         WHERE coa.is_active = 1
@@ -2075,7 +2075,7 @@ try {
                                                 </tbody>
                                             </table>
                                         </div>
-                                        <?php 
+                                        <?php
                                         $balanceSheetBalanced = abs($finTotalAssets - ($finTotalLiabilities + $finTotalEquity + $finNetProfit)) < 0.01;
                                         ?>
                                         <?php if ($balanceSheetBalanced): ?>
@@ -2440,7 +2440,8 @@ try {
     <!-- Footer -->
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="../includes/alert-modal.js"></script>
+
+    <script src="../includes/document_exporter.js?v=1"></script>
     <script>
         function toggleSidebar() {
             document.getElementById('sidebar').classList.toggle('show');
@@ -2573,18 +2574,12 @@ try {
                 return response.text();
             })
             .then(csvContent => {
-                // Create and download the file
-                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                const link = document.createElement('a');
-                const url = URL.createObjectURL(blob);
-
-                link.setAttribute('href', url);
-                link.setAttribute('download', `trial_balance_${trialDateTo}.csv`);
-                link.style.visibility = 'hidden';
-
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
+                // Create and download a formatted workbook
+                DocumentExporter.downloadTextReport(
+                    `Trial Balance\nPeriod: ${trialDateFrom} to ${trialDateTo}\n\n${csvContent}`,
+                    `trial_balance_${trialDateTo}.xls`,
+                    'Trial Balance'
+                );
 
                 // Show success message
                 showAlert('success', 'Trial Balance exported successfully!');
@@ -2880,15 +2875,11 @@ try {
                 csv += row.map(field => `"${String(field).replace(/"/g, '""')}"`).join(',') + '\n';
             });
 
-            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement('a');
-            const url = URL.createObjectURL(blob);
-            link.href = url;
-            link.download = `general_ledger_audit_${new Date().toISOString().slice(0, 10)}.csv`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
+            DocumentExporter.downloadTextReport(
+                `General Ledger Audit Report\n\n${csv}`,
+                `general_ledger_audit_${new Date().toISOString().slice(0, 10)}.xls`,
+                'General Ledger Audit Report'
+            );
         }
 
         function startAuditPolling() {
