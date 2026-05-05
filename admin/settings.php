@@ -831,10 +831,6 @@ $departments = [
                             <li class="nav-item" role="presentation">
                                 <button class="nav-link" id="user-tab" data-bs-toggle="tab" data-bs-target="#user" type="button" role="tab" aria-controls="user" aria-selected="false"><i class="fas fa-users"></i> User Management</button>
                             </li>
-
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="departments-tab" data-bs-toggle="tab" data-bs-target="#departments" type="button" role="tab" aria-controls="departments" aria-selected="false"><i class="fas fa-sitemap"></i> Departments Integration</button>
-                            </li>
                         </ul>
                         <div class="tab-content mt-3" id="settingsTabContent">
                             <div class="tab-pane fade show active" id="maintenance" role="tabpanel" aria-labelledby="maintenance-tab">
@@ -920,58 +916,6 @@ $departments = [
                                 </div>
                             </div>
 
-                            <div class="tab-pane fade" id="departments" role="tabpanel" aria-labelledby="departments-tab">
-                                <div id="departmentsAlertContainer"></div>
-                                <div class="card">
-                                    <div class="card-header">
-                                        <h5><i class="fas fa-sitemap me-2"></i>Integrated Departments</h5>
-                                        <small class="text-muted">Live health checks run on page load for connected department APIs.</small>
-                                    </div>
-                                    <div class="card-body">
-                                        <div class="table-responsive">
-                                            <table class="table table-striped table-hover table-mobile-stack">
-                                                <thead class="table-dark">
-                                                    <tr>
-                                                        <th>Department</th>
-                                                        <th>Scope</th>
-                                                        <th>Modules</th>
-                                                        <th>API Status</th>
-                                                        <th>Actions</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    <?php foreach ($departments as $department): ?>
-                                                    <tr>
-                                                        <td data-label="Department"><strong><?php echo htmlspecialchars($department['name']); ?></strong></td>
-                                                        <td data-label="Scope"><?php echo htmlspecialchars($department['scope']); ?></td>
-                                                        <td data-label="Modules">
-                                                            <?php echo htmlspecialchars(implode(', ', $department['modules'])); ?>
-                                                        </td>
-                                                        <td data-label="API Status">
-                                                            <?php if ($department['integration_key']): ?>
-                                                                <span class="badge bg-secondary" id="status-<?php echo htmlspecialchars($department['integration_key']); ?>">Checking...</span>
-                                                                <div class="text-muted small mt-1" id="status-detail-<?php echo htmlspecialchars($department['integration_key']); ?>"></div>
-                                                            <?php else: ?>
-                                                                <span class="badge bg-secondary">Not Integrated</span>
-                                                            <?php endif; ?>
-                                                        </td>
-                                                        <td data-label="Actions">
-                                                            <?php if ($department['integration_key']): ?>
-                                                                <button class="btn btn-outline-primary btn-sm" onclick="testDepartmentIntegration('<?php echo $department['integration_key']; ?>')">
-                                                                    <i class="fas fa-vial"></i> Test
-                                                                </button>
-                                                            <?php else: ?>
-                                                                <span class="text-muted">N/A</span>
-                                                            <?php endif; ?>
-                                                        </td>
-                                                    </tr>
-                                                    <?php endforeach; ?>
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
 
                         </div>
                     </div>
@@ -1156,83 +1100,6 @@ $departments = [
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        function showDepartmentsAlert(message, type) {
-            const alert = `
-                <div class="alert alert-${type} alert-dismissible fade show" role="alert">
-                    ${message}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                </div>
-            `;
-            document.getElementById('departmentsAlertContainer').innerHTML = alert;
-
-            setTimeout(() => {
-                document.querySelector('#departmentsAlertContainer .alert')?.remove();
-            }, 5000);
-        }
-
-        function checkDepartmentIntegrationStatus(name) {
-            const badge = document.getElementById(`status-${name}`);
-            const detail = document.getElementById(`status-detail-${name}`);
-            if (!badge) {
-                return;
-            }
-
-            const formData = new FormData();
-            formData.append('action', 'test');
-            formData.append('integration_name', name);
-
-            fetch('../api/integrations.php', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(result => {
-                if (result.success) {
-                    badge.className = 'badge bg-success';
-                    badge.textContent = 'Working';
-                    if (detail) {
-                        detail.textContent = '';
-                    }
-                } else {
-                    badge.className = 'badge bg-danger';
-                    badge.textContent = 'Failed';
-                    if (detail) {
-                        detail.textContent = result.error || result.message || 'No error details returned.';
-                    }
-                }
-            })
-            .catch(() => {
-                badge.className = 'badge bg-danger';
-                badge.textContent = 'Failed';
-                if (detail) {
-                    detail.textContent = 'Request failed. Check API URL, network, or server response.';
-                }
-            });
-        }
-
-        function syncDepartmentIntegrations() {
-            ['hr3', 'hr4', 'logistics1', 'logistics2'].forEach(checkDepartmentIntegrationStatus);
-        }
-
-        function testDepartmentIntegration(name) {
-            const formData = new FormData();
-            formData.append('action', 'test');
-            formData.append('integration_name', name);
-
-            fetch('../api/integrations.php', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(result => {
-                if (result.success) {
-                    showDepartmentsAlert(result.message || 'Connection successful', 'success');
-                } else {
-                    showDepartmentsAlert(result.error || result.message || 'Connection failed', 'danger');
-                }
-            })
-            .catch(error => showDepartmentsAlert('Error: ' + error.message, 'danger'));
-        }
 
         function toggleSidebar() {
             document.getElementById('sidebar').classList.toggle('show');
@@ -1261,8 +1128,6 @@ $departments = [
                 toggle.style.left = '290px';
             }
         }
-
-
         // Roles & Permissions Functions
         function showRolesAlert(message, type) {
             const alert = `
@@ -1521,12 +1386,8 @@ $departments = [
                 arrow.classList.add('fa-chevron-left');
                 toggle.style.left = '290px';
             }
-            syncDepartmentIntegrations();
         });
     </script>
 <script src="../includes/tab_persistence.js?v=1"></script>
 </body>
 </html>
-
-
-
