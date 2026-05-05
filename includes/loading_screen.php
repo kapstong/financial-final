@@ -1,10 +1,10 @@
 <?php
+// Loading screen has been disabled
 if (defined('ATIERA_LOADING_SCREEN_INCLUDED')) {
     return;
 }
 define('ATIERA_LOADING_SCREEN_INCLUDED', true);
 ?>
-<style>
 .atiera-transition-loader {
     --atiera-navy-900: #0f1c49;
     --atiera-navy-800: #162439;
