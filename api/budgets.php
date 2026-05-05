@@ -612,7 +612,7 @@ function forecastMonthsForTargetDate($targetDate, $defaultMonths = 12, $maxMonth
     return min(max($months, 1), $maxMonths);
 }
 
-function runRandomForestForecast(array $history, int $predictMonths) {
+function runRandomForestForecast(array $history, int $predictMonths, bool $allowNegative = false) {
     $tmpFile = tempnam(sys_get_temp_dir(), 'budget_forecast_');
     if ($tmpFile === false) {
         return ['error' => 'Unable to prepare forecast training data'];
@@ -634,18 +634,18 @@ function runRandomForestForecast(array $history, int $predictMonths) {
     fclose($handle);
 
     $scriptPath = realpath(__DIR__ . '/../scripts/budget_forecast.py');
-    $result = run_python_script($scriptPath ?: '', [$csvPath, $predictMonths], 45);
+    $result = run_python_script($scriptPath ?: '', [$csvPath, $predictMonths, $allowNegative ? 'allow_negative' : 'non_negative'], 45);
     @unlink($csvPath);
 
     if (($result['exit_code'] ?? -1) !== 0) {
-        $fallback = buildPhpForecastFallback($history, $predictMonths);
+        $fallback = buildPhpForecastFallback($history, $predictMonths, $allowNegative);
         $fallback['details']['python_error'] = trim((string)($result['stderr'] ?? $result['stdout'] ?? ''));
         return $fallback;
     }
 
     $payload = json_decode((string)$result['stdout'], true);
     if (!is_array($payload)) {
-        $fallback = buildPhpForecastFallback($history, $predictMonths);
+        $fallback = buildPhpForecastFallback($history, $predictMonths, $allowNegative);
         $fallback['details']['python_error'] = 'Random Forest forecast returned invalid JSON';
         return $fallback;
     }
@@ -653,7 +653,7 @@ function runRandomForestForecast(array $history, int $predictMonths) {
     return $payload;
 }
 
-function buildPhpForecastFallback(array $history, int $predictMonths) {
+function buildPhpForecastFallback(array $history, int $predictMonths, bool $allowNegative = false) {
     $values = array_map(function ($item) {
         return (float)($item['value'] ?? 0);
     }, $history);
@@ -672,7 +672,10 @@ function buildPhpForecastFallback(array $history, int $predictMonths) {
 
     $forecast = [];
     for ($i = 1; $i <= $predictMonths; $i++) {
-        $lastValue = max(0.0, $lastValue * (1 + $averageGrowth));
+        $lastValue = $lastValue * (1 + $averageGrowth);
+        if (!$allowNegative) {
+            $lastValue = max(0.0, $lastValue);
+        }
         $forecast[] = [
             'date' => $lastDate->modify('+' . $i . ' months')->format('Y-m-01'),
             'value' => round($lastValue, 2)
@@ -716,40 +719,374 @@ function buildMonthlyHistory(array $rows, $months) {
     return $history;
 }
 
+function getForecastSourceDefinitions() {
+    return [
+        'disbursements' => [
+            'label' => 'Disbursements',
+            'direction' => 'expense',
+            'table' => 'disbursements',
+            'date_field' => 'disbursement_date',
+            'amount_field' => 'amount',
+            'description' => 'Approved and paid cash outflows recorded in the Disbursements module.',
+            'sql' => "
+                SELECT DATE_FORMAT(disbursement_date, '%Y-%m-01') as month,
+                       'disbursements' as source,
+                       COALESCE(SUM(amount), 0) as amount,
+                       COUNT(*) as entries,
+                       MIN(disbursement_date) as first_transaction_date,
+                       MAX(disbursement_date) as last_transaction_date
+                FROM disbursements
+                WHERE disbursement_date IS NOT NULL
+                  AND status IN ('approved', 'paid')
+                  AND disbursement_date BETWEEN ? AND ?
+                GROUP BY month
+            "
+        ],
+        'payments_made' => [
+            'label' => 'Payments Made',
+            'direction' => 'expense',
+            'table' => 'payments_made',
+            'date_field' => 'payment_date',
+            'amount_field' => 'amount',
+            'description' => 'Vendor and operational payments captured in Accounts Payable workflows.',
+            'sql' => "
+                SELECT DATE_FORMAT(payment_date, '%Y-%m-01') as month,
+                       'payments_made' as source,
+                       COALESCE(SUM(amount), 0) as amount,
+                       COUNT(*) as entries,
+                       MIN(payment_date) as first_transaction_date,
+                       MAX(payment_date) as last_transaction_date
+                FROM payments_made
+                WHERE payment_date IS NOT NULL
+                  AND payment_date BETWEEN ? AND ?
+                GROUP BY month
+            "
+        ],
+        'bills' => [
+            'label' => 'Bills',
+            'direction' => 'expense',
+            'table' => 'bills',
+            'date_field' => 'bill_date',
+            'amount_field' => 'total_amount',
+            'description' => 'Recognized payables from the Bills and Accounts Payable module, excluding cancelled bills.',
+            'sql' => "
+                SELECT DATE_FORMAT(bill_date, '%Y-%m-01') as month,
+                       'bills' as source,
+                       COALESCE(SUM(total_amount), 0) as amount,
+                       COUNT(*) as entries,
+                       MIN(bill_date) as first_transaction_date,
+                       MAX(bill_date) as last_transaction_date
+                FROM bills
+                WHERE bill_date IS NOT NULL
+                  AND status <> 'cancelled'
+                  AND bill_date BETWEEN ? AND ?
+                GROUP BY month
+            "
+        ],
+        'payments_received' => [
+            'label' => 'Payments Received',
+            'direction' => 'revenue',
+            'table' => 'payments_received',
+            'date_field' => 'payment_date',
+            'amount_field' => 'amount',
+            'description' => 'Cash collections recorded from customers, invoices, refunds, and credits.',
+            'sql' => "
+                SELECT DATE_FORMAT(payment_date, '%Y-%m-01') as month,
+                       'payments_received' as source,
+                       COALESCE(SUM(amount), 0) as amount,
+                       COUNT(*) as entries,
+                       MIN(payment_date) as first_transaction_date,
+                       MAX(payment_date) as last_transaction_date
+                FROM payments_received
+                WHERE payment_date IS NOT NULL
+                  AND payment_date BETWEEN ? AND ?
+                GROUP BY month
+            "
+        ],
+        'invoices' => [
+            'label' => 'Invoices',
+            'direction' => 'revenue',
+            'table' => 'invoices',
+            'date_field' => 'invoice_date',
+            'amount_field' => 'total_amount',
+            'description' => 'Recognized receivables from customer invoices, excluding cancelled invoices.',
+            'sql' => "
+                SELECT DATE_FORMAT(invoice_date, '%Y-%m-01') as month,
+                       'invoices' as source,
+                       COALESCE(SUM(total_amount), 0) as amount,
+                       COUNT(*) as entries,
+                       MIN(invoice_date) as first_transaction_date,
+                       MAX(invoice_date) as last_transaction_date
+                FROM invoices
+                WHERE invoice_date IS NOT NULL
+                  AND status <> 'cancelled'
+                  AND invoice_date BETWEEN ? AND ?
+                GROUP BY month
+            "
+        ],
+        'budget_actuals' => [
+            'label' => 'Budget Actuals',
+            'direction' => 'expense',
+            'table' => 'budget_actuals',
+            'date_field' => 'transaction_date',
+            'amount_field' => 'amount',
+            'description' => 'Budget actual spend transactions tied to budgets, departments, categories, and accounts.',
+            'sql' => "
+                SELECT DATE_FORMAT(transaction_date, '%Y-%m-01') as month,
+                       'budget_actuals' as source,
+                       COALESCE(SUM(amount), 0) as amount,
+                       COUNT(*) as entries,
+                       MIN(transaction_date) as first_transaction_date,
+                       MAX(transaction_date) as last_transaction_date
+                FROM budget_actuals
+                WHERE transaction_date IS NOT NULL
+                  AND transaction_date BETWEEN ? AND ?
+                GROUP BY month
+            "
+        ],
+        'fixed_assets' => [
+            'label' => 'Fixed Assets',
+            'direction' => 'expense',
+            'table' => 'fixed_assets',
+            'date_field' => 'purchase_date',
+            'amount_field' => 'purchase_cost',
+            'description' => 'Capital asset purchases from the Fixed Assets module.',
+            'sql' => "
+                SELECT DATE_FORMAT(purchase_date, '%Y-%m-01') as month,
+                       'fixed_assets' as source,
+                       COALESCE(SUM(CASE WHEN purchase_cost > 0 THEN purchase_cost ELSE purchase_price END), 0) as amount,
+                       COUNT(*) as entries,
+                       MIN(purchase_date) as first_transaction_date,
+                       MAX(purchase_date) as last_transaction_date
+                FROM fixed_assets
+                WHERE purchase_date IS NOT NULL
+                  AND purchase_date BETWEEN ? AND ?
+                GROUP BY month
+            "
+        ],
+        'cashier_collections' => [
+            'label' => 'Cashier Collections',
+            'direction' => 'revenue',
+            'table' => 'cashier_transactions',
+            'date_field' => 'transaction_date',
+            'amount_field' => 'amount',
+            'description' => 'Cashier collections and deposits from cashier sessions and outlet activity.',
+            'sql' => "
+                SELECT DATE_FORMAT(transaction_date, '%Y-%m-01') as month,
+                       'cashier_collections' as source,
+                       COALESCE(SUM(amount), 0) as amount,
+                       COUNT(*) as entries,
+                       MIN(DATE(transaction_date)) as first_transaction_date,
+                       MAX(DATE(transaction_date)) as last_transaction_date
+                FROM cashier_transactions
+                WHERE transaction_date IS NOT NULL
+                  AND transaction_type IN ('collection', 'deposit')
+                  AND DATE(transaction_date) BETWEEN ? AND ?
+                GROUP BY month
+            "
+        ],
+        'cashier_outflows' => [
+            'label' => 'Cashier Outflows',
+            'direction' => 'expense',
+            'table' => 'cashier_transactions',
+            'date_field' => 'transaction_date',
+            'amount_field' => 'amount',
+            'description' => 'Cashier payments, withdrawals, and negative adjustments from cashier sessions.',
+            'sql' => "
+                SELECT DATE_FORMAT(transaction_date, '%Y-%m-01') as month,
+                       'cashier_outflows' as source,
+                       COALESCE(SUM(amount), 0) as amount,
+                       COUNT(*) as entries,
+                       MIN(DATE(transaction_date)) as first_transaction_date,
+                       MAX(DATE(transaction_date)) as last_transaction_date
+                FROM cashier_transactions
+                WHERE transaction_date IS NOT NULL
+                  AND transaction_type IN ('payment', 'withdrawal', 'adjustment')
+                  AND DATE(transaction_date) BETWEEN ? AND ?
+                GROUP BY month
+            "
+        ],
+        'imported_revenue' => [
+            'label' => 'Imported Revenue',
+            'direction' => 'revenue',
+            'table' => 'imported_transactions',
+            'date_field' => 'transaction_date',
+            'amount_field' => 'amount',
+            'description' => 'Revenue-like transactions imported from integrated systems such as hotel, POS, and restaurant systems.',
+            'sql' => "
+                SELECT DATE_FORMAT(transaction_date, '%Y-%m-01') as month,
+                       'imported_revenue' as source,
+                       COALESCE(SUM(amount), 0) as amount,
+                       COUNT(*) as entries,
+                       MIN(DATE(transaction_date)) as first_transaction_date,
+                       MAX(DATE(transaction_date)) as last_transaction_date
+                FROM imported_transactions
+                WHERE transaction_date IS NOT NULL
+                  AND status NOT IN ('rejected', 'duplicate')
+                  AND LOWER(transaction_type) NOT REGEXP 'expense|payroll|supplier|invoice|procurement|cost|usage'
+                  AND DATE(transaction_date) BETWEEN ? AND ?
+                GROUP BY month
+            "
+        ],
+        'imported_expenses' => [
+            'label' => 'Imported Expenses',
+            'direction' => 'expense',
+            'table' => 'imported_transactions',
+            'date_field' => 'transaction_date',
+            'amount_field' => 'amount',
+            'description' => 'Expense-like transactions imported from HR, logistics, procurement, inventory, and other integrated systems.',
+            'sql' => "
+                SELECT DATE_FORMAT(transaction_date, '%Y-%m-01') as month,
+                       'imported_expenses' as source,
+                       COALESCE(SUM(amount), 0) as amount,
+                       COUNT(*) as entries,
+                       MIN(DATE(transaction_date)) as first_transaction_date,
+                       MAX(DATE(transaction_date)) as last_transaction_date
+                FROM imported_transactions
+                WHERE transaction_date IS NOT NULL
+                  AND status NOT IN ('rejected', 'duplicate')
+                  AND LOWER(transaction_type) REGEXP 'expense|payroll|supplier|invoice|procurement|cost|usage'
+                  AND DATE(transaction_date) BETWEEN ? AND ?
+                GROUP BY month
+            "
+        ],
+        'daily_revenue_summary' => [
+            'label' => 'Daily Revenue Summary',
+            'direction' => 'revenue',
+            'table' => 'daily_revenue_summary',
+            'date_field' => 'business_date',
+            'amount_field' => 'net_revenue',
+            'description' => 'Daily summarized revenue by department, revenue center, source system, and category.',
+            'sql' => "
+                SELECT DATE_FORMAT(business_date, '%Y-%m-01') as month,
+                       'daily_revenue_summary' as source,
+                       COALESCE(SUM(net_revenue), 0) as amount,
+                       COALESCE(SUM(total_transactions), COUNT(*)) as entries,
+                       MIN(business_date) as first_transaction_date,
+                       MAX(business_date) as last_transaction_date
+                FROM daily_revenue_summary
+                WHERE business_date IS NOT NULL
+                  AND business_date BETWEEN ? AND ?
+                GROUP BY month
+            "
+        ],
+        'daily_expense_summary' => [
+            'label' => 'Daily Expense Summary',
+            'direction' => 'expense',
+            'table' => 'daily_expense_summary',
+            'date_field' => 'business_date',
+            'amount_field' => 'total_amount',
+            'description' => 'Daily summarized expenses by department, category, and source system.',
+            'sql' => "
+                SELECT DATE_FORMAT(business_date, '%Y-%m-01') as month,
+                       'daily_expense_summary' as source,
+                       COALESCE(SUM(total_amount), 0) as amount,
+                       COALESCE(SUM(total_transactions), COUNT(*)) as entries,
+                       MIN(business_date) as first_transaction_date,
+                       MAX(business_date) as last_transaction_date
+                FROM daily_expense_summary
+                WHERE business_date IS NOT NULL
+                  AND business_date BETWEEN ? AND ?
+                GROUP BY month
+            "
+        ]
+    ];
+}
+
+function resolveForecastCategory($category, array $sourceDefinitions) {
+    $category = strtolower(trim((string)$category));
+    $allowed = array_merge(['combined', 'expenses', 'revenue', 'net_cash_flow'], array_keys($sourceDefinitions));
+    if (!in_array($category, $allowed, true)) {
+        return 'combined';
+    }
+    return $category;
+}
+
+function initializeForecastSourceMap(array $sourceDefinitions) {
+    $map = [];
+    foreach ($sourceDefinitions as $sourceKey => $_definition) {
+        $map[$sourceKey] = 0.0;
+    }
+    return $map;
+}
+
+function selectedForecastValue(array $breakdown, string $category, array $sourceDefinitions) {
+    if (isset($sourceDefinitions[$category])) {
+        return (float)($breakdown[$category] ?? 0);
+    }
+
+    $revenue = 0.0;
+    $expenses = 0.0;
+    foreach ($sourceDefinitions as $sourceKey => $definition) {
+        $amount = (float)($breakdown[$sourceKey] ?? 0);
+        if (($definition['direction'] ?? 'expense') === 'revenue') {
+            $revenue += $amount;
+        } else {
+            $expenses += $amount;
+        }
+    }
+
+    if ($category === 'revenue') {
+        return $revenue;
+    }
+    if ($category === 'net_cash_flow') {
+        return $revenue - $expenses;
+    }
+
+    return $expenses;
+}
+
+function forecastSourceIncludedInTraining(string $sourceKey, string $category, array $sourceDefinitions) {
+    if (isset($sourceDefinitions[$category])) {
+        return $sourceKey === $category;
+    }
+    if ($category === 'revenue') {
+        return ($sourceDefinitions[$sourceKey]['direction'] ?? 'expense') === 'revenue';
+    }
+    if ($category === 'net_cash_flow') {
+        return true;
+    }
+
+    return ($sourceDefinitions[$sourceKey]['direction'] ?? 'expense') === 'expense';
+}
+
 function getForecastData($db) {
     $months = clampForecastMonths($_GET['months'] ?? 36);
     $forecastDate = trim((string)($_GET['forecast_date'] ?? ''));
     $predictMonths = $forecastDate !== ''
         ? forecastMonthsForTargetDate($forecastDate, 12)
         : clampPredictMonths($_GET['predict_months'] ?? 12);
-    $category = strtolower(trim((string)($_GET['category'] ?? 'combined')));
-    $allowedCategories = ['combined', 'disbursements', 'payments_made'];
-    if (!in_array($category, $allowedCategories, true)) {
-        $category = 'combined';
-    }
+    $sourceDefinitions = getForecastSourceDefinitions();
+    $category = resolveForecastCategory($_GET['category'] ?? 'combined', $sourceDefinitions);
 
     $endMonth = new DateTimeImmutable(date('Y-m-01'));
     $startDate = $endMonth->modify('-' . max($months - 1, 0) . ' months')->format('Y-m-01');
     $endDate = date('Y-m-d');
 
+    $queryParts = [];
+    $queryParams = [];
+    foreach ($sourceDefinitions as $definition) {
+        $queryParts[] = $definition['sql'];
+        $queryParams[] = $startDate;
+        $queryParams[] = $endDate;
+    }
+
     $query = "
-        SELECT month, source, SUM(amount) as amount, COUNT(*) as entries FROM (
-            SELECT DATE_FORMAT(disbursement_date, '%Y-%m-01') as month, amount, 'disbursements' as source
-            FROM disbursements
-            WHERE disbursement_date IS NOT NULL
-              AND disbursement_date BETWEEN ? AND ?
-            UNION ALL
-            SELECT DATE_FORMAT(payment_date, '%Y-%m-01') as month, amount, 'payments_made' as source
-            FROM payments_made
-            WHERE payment_date IS NOT NULL
-              AND payment_date BETWEEN ? AND ?
-        ) t
+        SELECT month,
+               source,
+               SUM(amount) as amount,
+               SUM(entries) as entries,
+               MIN(first_transaction_date) as first_transaction_date,
+               MAX(last_transaction_date) as last_transaction_date
+        FROM (
+            " . implode("\nUNION ALL\n", $queryParts) . "
+        ) forecast_sources
         GROUP BY month, source
         ORDER BY month ASC, source ASC
     ";
 
     $stmt = $db->prepare($query);
-    $stmt->execute([$startDate, $endDate, $startDate, $endDate]);
+    $stmt->execute($queryParams);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     if (empty($rows)) {
@@ -758,31 +1095,41 @@ function getForecastData($db) {
     }
 
     $monthSourceMap = [];
-    $sourceTotals = [
-        'disbursements' => 0.0,
-        'payments_made' => 0.0
-    ];
-    $sourceEntries = [
-        'disbursements' => 0,
-        'payments_made' => 0
-    ];
+    $sourceTotals = initializeForecastSourceMap($sourceDefinitions);
+    $sourceEntries = array_fill_keys(array_keys($sourceDefinitions), 0);
+    $sourceCoverage = [];
+    foreach ($sourceDefinitions as $sourceKey => $_definition) {
+        $sourceCoverage[$sourceKey] = [
+            'first_transaction_date' => null,
+            'last_transaction_date' => null
+        ];
+    }
 
     foreach ($rows as $row) {
         $monthKey = date('Y-m-01', strtotime((string)$row['month']));
         $sourceKey = $row['source'];
+        if (!isset($sourceDefinitions[$sourceKey])) {
+            continue;
+        }
         $amount = (float)($row['amount'] ?? 0);
         $entries = (int)($row['entries'] ?? 0);
 
         if (!isset($monthSourceMap[$monthKey])) {
-            $monthSourceMap[$monthKey] = [
-                'disbursements' => 0.0,
-                'payments_made' => 0.0
-            ];
+            $monthSourceMap[$monthKey] = initializeForecastSourceMap($sourceDefinitions);
         }
 
         $monthSourceMap[$monthKey][$sourceKey] = $amount;
         $sourceTotals[$sourceKey] += $amount;
         $sourceEntries[$sourceKey] += $entries;
+
+        $firstDate = $row['first_transaction_date'] ?? null;
+        $lastDate = $row['last_transaction_date'] ?? null;
+        if ($firstDate && (!$sourceCoverage[$sourceKey]['first_transaction_date'] || $firstDate < $sourceCoverage[$sourceKey]['first_transaction_date'])) {
+            $sourceCoverage[$sourceKey]['first_transaction_date'] = $firstDate;
+        }
+        if ($lastDate && (!$sourceCoverage[$sourceKey]['last_transaction_date'] || $lastDate > $sourceCoverage[$sourceKey]['last_transaction_date'])) {
+            $sourceCoverage[$sourceKey]['last_transaction_date'] = $lastDate;
+        }
     }
 
     $history = [];
@@ -790,19 +1137,8 @@ function getForecastData($db) {
     $startCursor = $endCursor->modify('-' . max($months - 1, 0) . ' months');
     for ($cursor = $startCursor; $cursor->getTimestamp() <= $endCursor->getTimestamp(); $cursor = $cursor->modify('+1 month')) {
         $monthKey = $cursor->format('Y-m-01');
-        $breakdown = $monthSourceMap[$monthKey] ?? [
-            'disbursements' => 0.0,
-            'payments_made' => 0.0
-        ];
-
-        $selectedValue = 0.0;
-        if ($category === 'disbursements') {
-            $selectedValue = (float)$breakdown['disbursements'];
-        } elseif ($category === 'payments_made') {
-            $selectedValue = (float)$breakdown['payments_made'];
-        } else {
-            $selectedValue = (float)$breakdown['disbursements'] + (float)$breakdown['payments_made'];
-        }
+        $breakdown = $monthSourceMap[$monthKey] ?? initializeForecastSourceMap($sourceDefinitions);
+        $selectedValue = selectedForecastValue($breakdown, $category, $sourceDefinitions);
 
         $history[] = [
             'date' => $monthKey,
@@ -817,27 +1153,30 @@ function getForecastData($db) {
     $avg = count($history) ? $total / count($history) : 0;
 
     $drivers = [];
-    $sourceLabels = [
-        'disbursements' => 'Disbursements',
-        'payments_made' => 'Payments Made'
-    ];
-    foreach ($sourceLabels as $sourceKey => $label) {
+    foreach ($sourceDefinitions as $sourceKey => $definition) {
         $recent = array_slice(array_map(function ($item) use ($sourceKey) {
             return (float)($item['source_breakdown'][$sourceKey] ?? 0);
         }, $history), -3);
 
         $drivers[] = [
             'source' => $sourceKey,
-            'label' => $label,
+            'label' => $definition['label'],
+            'direction' => $definition['direction'],
+            'included_in_training' => forecastSourceIncludedInTraining($sourceKey, $category, $sourceDefinitions),
+            'table' => $definition['table'],
+            'date_field' => $definition['date_field'],
+            'amount_field' => $definition['amount_field'],
             'total' => (float)$sourceTotals[$sourceKey],
             'average_monthly' => count($history) ? (float)$sourceTotals[$sourceKey] / count($history) : 0,
             'recent_average' => count($recent) ? array_sum($recent) / count($recent) : 0,
             'entries' => (int)$sourceEntries[$sourceKey],
-            'share_percent' => $total > 0 ? ((float)$sourceTotals[$sourceKey] / $total) * 100 : 0
+            'share_percent' => ($total != 0.0 && forecastSourceIncludedInTraining($sourceKey, $category, $sourceDefinitions)) ? ((float)$sourceTotals[$sourceKey] / abs($total)) * 100 : 0,
+            'first_transaction_date' => $sourceCoverage[$sourceKey]['first_transaction_date'],
+            'last_transaction_date' => $sourceCoverage[$sourceKey]['last_transaction_date']
         ];
     }
 
-    $modelResult = runRandomForestForecast($history, $predictMonths);
+    $modelResult = runRandomForestForecast($history, $predictMonths, $category === 'net_cash_flow');
     if (isset($modelResult['error'])) {
         $errorResponse = [
             'error' => $modelResult['error'],
@@ -861,25 +1200,30 @@ function getForecastData($db) {
             'total' => (float)$total,
             'average_monthly' => (float)$avg,
             'selected_category' => $category,
-            'source_totals' => $sourceTotals
+            'source_totals' => $sourceTotals,
+            'source_entries' => $sourceEntries,
+            'source_count' => count($sourceDefinitions),
+            'included_transactions' => array_sum($sourceEntries),
+            'training_basis' => $category === 'combined' ? 'all expense/outflow sources' : $category
         ],
         'model' => [
             'method' => $modelResult['method'] ?? 'random_forest_regressor',
             'details' => $modelResult['details'] ?? null
         ],
         'drivers' => $drivers,
-        'lineage' => [
-            [
-                'source' => 'disbursements',
-                'label' => 'Disbursements',
-                'description' => 'Posted outflows recorded in the Disbursements module.'
-            ],
-            [
-                'source' => 'payments_made',
-                'label' => 'Payments Made',
-                'description' => 'Operational and vendor payments captured in AP workflows.'
-            ]
-        ],
+        'lineage' => array_map(function ($sourceKey, $definition) use ($sourceCoverage) {
+            return [
+                'source' => $sourceKey,
+                'label' => $definition['label'],
+                'direction' => $definition['direction'],
+                'table' => $definition['table'],
+                'date_field' => $definition['date_field'],
+                'amount_field' => $definition['amount_field'],
+                'description' => $definition['description'],
+                'first_transaction_date' => $sourceCoverage[$sourceKey]['first_transaction_date'],
+                'last_transaction_date' => $sourceCoverage[$sourceKey]['last_transaction_date']
+            ];
+        }, array_keys($sourceDefinitions), $sourceDefinitions),
         'method' => $modelResult['method'] ?? 'random_forest_regressor'
     ];
 

@@ -24,7 +24,7 @@ def add_months(date_value, months):
     return datetime(year, month, 1)
 
 
-def simple_forecast(dates, values, periods, details):
+def simple_forecast(dates, values, periods, details, allow_negative=False):
     last_date = parse_month(dates[-1]) if dates else datetime.today().replace(day=1)
     vals = [float(v) for v in values]
     forecast = []
@@ -33,7 +33,8 @@ def simple_forecast(dates, values, periods, details):
         last_value = vals[-1] if vals else 0.0
         for idx in range(1, periods + 1):
             target_date = add_months(last_date, idx)
-            forecast.append({"date": target_date.strftime("%Y-%m-01"), "value": round(last_value, 2)})
+            value = last_value if allow_negative else max(last_value, 0)
+            forecast.append({"date": target_date.strftime("%Y-%m-01"), "value": round(value, 2)})
         return {"method": "naive", "forecast": forecast, "details": details}
 
     growth_rates = []
@@ -46,7 +47,9 @@ def simple_forecast(dates, values, periods, details):
     for idx in range(1, periods + 1):
         target_date = add_months(last_date, idx)
         value = value * (1 + average_growth)
-        forecast.append({"date": target_date.strftime("%Y-%m-01"), "value": round(float(max(value, 0)), 2)})
+        if not allow_negative:
+            value = max(value, 0)
+        forecast.append({"date": target_date.strftime("%Y-%m-01"), "value": round(float(value), 2)})
 
     return {
         "method": "avg_growth_fallback",
@@ -66,11 +69,11 @@ def build_lag_features(values, dates, lag_count=6):
     return rows, targets
 
 
-def random_forest_forecast(dates, values, periods):
+def random_forest_forecast(dates, values, periods, allow_negative=False):
     lag_count = min(6, max(2, len(values) // 2))
     x_train, y_train = build_lag_features(values, dates, lag_count)
     if not x_train:
-        return simple_forecast(dates, values, periods, "Insufficient history for RandomForestRegressor")
+        return simple_forecast(dates, values, periods, "Insufficient history for RandomForestRegressor", allow_negative)
 
     model = RandomForestRegressor(
         n_estimators=300,
@@ -88,7 +91,8 @@ def random_forest_forecast(dates, values, periods):
         target_date = add_months(last_date, step)
         feature_row = rolling_values[-lag_count:] + [target_date.month, target_date.year, len(rolling_values)]
         prediction = float(model.predict(np.array([feature_row], dtype=float))[0])
-        prediction = max(prediction, 0.0)
+        if not allow_negative:
+            prediction = max(prediction, 0.0)
         forecast.append({"date": target_date.strftime("%Y-%m-01"), "value": round(prediction, 2)})
         rolling_values.append(prediction)
 
@@ -109,11 +113,12 @@ def random_forest_forecast(dates, values, periods):
 
 def main():
     if len(sys.argv) < 3:
-        print(json.dumps({"error": "Usage: budget_forecast.py <input_csv> <predict_months>"}))
+        print(json.dumps({"error": "Usage: budget_forecast.py <input_csv> <predict_months> [allow_negative|non_negative]"}))
         sys.exit(1)
 
     input_csv = sys.argv[1]
     periods = int(sys.argv[2]) if sys.argv[2].isdigit() else 12
+    allow_negative = len(sys.argv) >= 4 and sys.argv[3] == "allow_negative"
 
     if not os.path.isfile(input_csv):
         print(json.dumps({"error": "Input file not found"}))
@@ -138,9 +143,9 @@ def main():
     values = [item[1] for item in paired]
 
     if RandomForestRegressor is None or np is None:
-        result = simple_forecast(dates, values, periods, "scikit-learn is unavailable")
+        result = simple_forecast(dates, values, periods, "scikit-learn is unavailable", allow_negative)
     else:
-        result = random_forest_forecast(dates, values, periods)
+        result = random_forest_forecast(dates, values, periods, allow_negative)
 
     result["history"] = [{"date": date, "value": float(value)} for date, value in zip(dates, values)]
     print(json.dumps(result))

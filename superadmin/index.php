@@ -1149,9 +1149,17 @@ body {
                                                     <div class="col-md-5">
                                                         <label for="forecastSourceFilter" class="form-label small text-muted mb-1">Forecast source</label>
                                                         <select id="forecastSourceFilter" class="form-select">
-                                                            <option value="combined">Combined</option>
+                                                            <option value="combined">All Expenses</option>
+                                                            <option value="revenue">All Revenue</option>
+                                                            <option value="net_cash_flow">Net Cash Flow</option>
                                                             <option value="disbursements">Disbursements</option>
                                                             <option value="payments_made">Payments Made</option>
+                                                            <option value="payments_received">Payments Received</option>
+                                                            <option value="invoices">Invoices</option>
+                                                            <option value="bills">Bills</option>
+                                                            <option value="budget_actuals">Budget Actuals</option>
+                                                            <option value="imported_expenses">Imported Expenses</option>
+                                                            <option value="imported_revenue">Imported Revenue</option>
                                                         </select>
                                                     </div>
                                                     <div class="col-md-4">
@@ -1267,6 +1275,23 @@ body {
             }
 
             const redacted = dashboardForecastState?.data?.privacy_redacted;
+            const lineage = dashboardForecastState?.data?.lineage || [];
+            const sourceLabel = source => {
+                const match = lineage.find(item => item.source === source);
+                return match?.label || String(source || '').replaceAll('_', ' ');
+            };
+            const formatBreakdown = sourceBreakdown => {
+                const entries = Object.entries(sourceBreakdown || {})
+                    .filter(([, value]) => Number(value || 0) !== 0)
+                    .sort((left, right) => Math.abs(Number(right[1] || 0)) - Math.abs(Number(left[1] || 0)))
+                    .slice(0, 4);
+                if (!entries.length) {
+                    return 'No source activity';
+                }
+                return entries.map(([source, value]) => {
+                    return `${sourceLabel(source)}: ${redacted ? 'Masked' : formatForecastCurrency(value)}`;
+                }).join('<br>');
+            };
             const rows = [];
             history.forEach(item => {
                 const monthLabel = new Date(item.date).toLocaleDateString(undefined, { year: 'numeric', month: 'short' });
@@ -1275,9 +1300,8 @@ body {
                     <tr>
                         <td>${monthLabel}</td>
                         <td>${redacted ? 'Masked' : formatForecastCurrency(item.value)}</td>
-                        <td>${redacted ? 'Masked' : formatForecastCurrency(sourceBreakdown.disbursements)}</td>
-                        <td>${redacted ? 'Masked' : formatForecastCurrency(sourceBreakdown.payments_made)}</td>
-                        <td>Recorded historical outflow for ${selectedCategory.replace('_', ' ')}</td>
+                        <td colspan="2">${formatBreakdown(sourceBreakdown)}</td>
+                        <td>Historical ${selectedCategory.replaceAll('_', ' ')} training value</td>
                     </tr>
                 `);
             });
@@ -1288,8 +1312,7 @@ body {
                     <tr class="table-warning">
                         <td>${monthLabel}</td>
                         <td>${redacted ? 'Masked' : formatForecastCurrency(item.value)}</td>
-                        <td>-</td>
-                        <td>-</td>
+                        <td colspan="2">Forecast period</td>
                         <td>Projected continuation of the selected outflow pattern</td>
                     </tr>
                 `);
@@ -1306,7 +1329,7 @@ body {
             if (data.privacy_redacted) {
                 document.getElementById('projectedYearEnd').textContent = 'Masked';
                 document.getElementById('expectedVariance').textContent = 'Masked';
-                document.getElementById('forecastCoverageSummary').textContent = `${history.length} historical months | ${(data.summary?.selected_category || 'combined').replace('_', ' ')}`;
+                document.getElementById('forecastCoverageSummary').textContent = `${history.length} historical months | ${data.summary?.included_transactions || 0} rows | ${(data.summary?.selected_category || 'combined').replaceAll('_', ' ')}`;
                 document.getElementById('forecastLineageSummary').textContent = `${(data.method || data.model?.method || 'random_forest_regressor').replaceAll('_', ' ')}`;
                 document.getElementById('forecastSourceSummary').textContent = 'Masked';
                 return;
@@ -1327,11 +1350,14 @@ body {
 
             const projectedYearEnd = Math.round(ytd + avgMonthly * Math.max(monthsRemaining, 0));
             const variance = Math.round(projectedYearEnd - (typeof annualBudgetTotal !== 'undefined' ? annualBudgetTotal : 0));
-            const dominantDriver = (data.drivers || []).slice().sort((left, right) => (right.total || 0) - (left.total || 0))[0];
+            const dominantDriver = (data.drivers || [])
+                .filter(item => item.included_in_training)
+                .slice()
+                .sort((left, right) => Math.abs(right.total || 0) - Math.abs(left.total || 0))[0];
 
             document.getElementById('projectedYearEnd').textContent = formatForecastCurrency(projectedYearEnd);
             document.getElementById('expectedVariance').textContent = `${variance >= 0 ? 'PHP ' : '-PHP '}${Math.abs(variance).toLocaleString()}`;
-            document.getElementById('forecastCoverageSummary').textContent = `${history.length} historical months | ${selectedCategory.replace('_', ' ')}`;
+            document.getElementById('forecastCoverageSummary').textContent = `${history.length} historical months | ${data.summary?.included_transactions || 0} rows | ${selectedCategory.replaceAll('_', ' ')}`;
             document.getElementById('forecastLineageSummary').textContent = `${(data.method || data.model?.method || 'random_forest_regressor').replaceAll('_', ' ')}`;
             document.getElementById('forecastSourceSummary').textContent = dominantDriver
                 ? `${dominantDriver.label} (${Math.round(dominantDriver.share_percent || 0)}% share)`
@@ -1346,19 +1372,19 @@ body {
             const { data, forecast, params } = dashboardForecastState;
             const rows = [];
             (data.history || []).forEach(item => {
+                const sourceBreakdown = item.source_breakdown || {};
                 rows.push([
                     item.date,
                     'actual',
                     item.value,
-                    item.source_breakdown?.disbursements || 0,
-                    item.source_breakdown?.payments_made || 0
+                    JSON.stringify(sourceBreakdown).replaceAll('"', "'")
                 ]);
             });
             (forecast || []).forEach(item => {
-                rows.push([item.date, 'forecast', item.value, '', '']);
+                rows.push([item.date, 'forecast', item.value, '']);
             });
 
-            let csv = 'Month,Series,Total,Disbursements,Payments Made\n';
+            let csv = 'Month,Series,Total,Source Breakdown\n';
             rows.forEach(row => {
                 csv += row.map(field => `"${String(field)}"`).join(',') + '\n';
             });
